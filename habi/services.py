@@ -147,4 +147,59 @@ def transferir(
       4. crear operación 'TRANSFERENCIA' y los dos movimientos (-monto / +monto)
     La clave la genera la capa que inicia la transferencia (uuid.uuid4()).
     """
-    raise NotImplementedError
+    monto = validar_monto(monto)
+    if not isinstance(clave_idempotencia, str) or not clave_idempotencia.strip():
+        raise ErrorValidacion("clave_idempotencia", "es obligatoria")
+    origen_id = _cuenta_propia(conn, usuario)
+    destino = repository.obtener_usuario_por_nombre(conn, (nombre_destino or "").strip())
+    if destino is None:
+        raise NoEncontrado(f"El usuario destino '{nombre_destino}' no existe.")
+    if destino["cuenta_id"] == origen_id:
+        raise ErrorValidacion("destino", "no puedes transferirte a ti mismo")
+
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        previa = repository.obtener_operacion_por_clave(conn, clave_idempotencia)
+        if previa is not None:
+            return _resultado_repetido(conn, previa, origen_id, destino["cuenta_id"], monto)
+        if not repository.debitar_si_alcanza(conn, origen_id, monto):
+            raise SaldoInsuficiente(
+                f"Saldo insuficiente: tienes {repository.obtener_saldo(conn, origen_id)} COP "
+                f"y quieres transferir {monto} COP."
+            )
+        repository.ajustar_saldo(conn, destino["cuenta_id"], monto)
+        operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)
+        repository.crear_movimiento(conn, operacion_id, origen_id, -monto, ahora)
+        repository.crear_movimiento(conn, operacion_id, destino["cuenta_id"], monto, ahora)
+    return ResultadoOperacion(
+        operacion_id=operacion_id,
+        tipo="TRANSFERENCIA",
+        monto=monto,
+        creada_en=ahora,
+        clave_idempotencia=clave_idempotencia,
+    )
+
+
+def _resultado_repetido(
+    conn: sqlite3.Connection, previa: sqlite3.Row, origen_id: int, destino_id: int, monto: int
+) -> ResultadoOperacion:
+    """RNF-R-03: la clave ya se usó. Solo se devuelve el resultado original si
+    corresponde a la misma transferencia; reutilizar una clave para otra cosa es un error."""
+    cuentas = {
+        fila["cuenta_id"]: fila["monto"] for fila in repository.movimientos_de_operacion(conn, previa["id"])
+    }
+    misma = (
+        previa["tipo"] == "TRANSFERENCIA"
+        and previa["monto"] == monto
+        and cuentas == {origen_id: -monto, destino_id: monto}
+    )
+    if not misma:
+        raise ErrorValidacion("clave_idempotencia", "ya fue usada para otra operación")
+    return ResultadoOperacion(
+        operacion_id=previa["id"],
+        tipo=previa["tipo"],
+        monto=previa["monto"],
+        creada_en=previa["creada_en"],
+        clave_idempotencia=previa["clave_idempotencia"],
+        repetida=True,
+    )

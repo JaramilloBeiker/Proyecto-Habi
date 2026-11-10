@@ -113,6 +113,14 @@ def crear_movimiento(conn: sqlite3.Connection, operacion_id: int, cuenta_id: int
     return cursor.lastrowid
 
 
+def movimientos_de_operacion(conn: sqlite3.Connection, operacion_id: int) -> list[sqlite3.Row]:
+    """Los movimientos (cuenta_id, monto) que componen una operación."""
+    return conn.execute(
+        "SELECT cuenta_id, monto FROM movimientos WHERE operacion_id = ? ORDER BY id",
+        (operacion_id,),
+    ).fetchall()
+
+
 def listar_movimientos(conn: sqlite3.Connection, cuenta_id: int, limite: int, desplazamiento: int) -> list[sqlite3.Row]:
     """Movimientos de la cuenta, del más reciente al más antiguo (ORDER BY id DESC), paginados (RF-06).
 
