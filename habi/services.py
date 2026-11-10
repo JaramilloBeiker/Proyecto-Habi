@@ -108,7 +108,22 @@ def consultar_saldo(conn: sqlite3.Connection, usuario: Usuario) -> int:
 
 def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int = 0) -> list[Movimiento]:
     """RF-06. Bloque `pagina` (desde 0) de config.TAMANO_PAGINA_HISTORIAL movimientos, más reciente primero."""
-    raise NotImplementedError
+    if isinstance(pagina, bool) or not isinstance(pagina, int) or pagina < 0:
+        raise ErrorValidacion("pagina", "debe ser un entero mayor o igual a 0")
+    cuenta_id = _cuenta_propia(conn, usuario)
+    tamano = config.TAMANO_PAGINA_HISTORIAL
+    filas = repository.listar_movimientos(conn, cuenta_id, tamano, pagina * tamano)
+    return [
+        Movimiento(
+            id=f["id"],
+            operacion_id=f["operacion_id"],
+            tipo_operacion=f["tipo_operacion"],
+            monto=f["monto"],
+            contraparte=f["contraparte"],
+            creado_en=f["creado_en"],
+        )
+        for f in filas
+    ]
 
 
 # ---------- Dinero (RF-03, RF-04) ----------
