@@ -121,7 +121,17 @@ def cargar_saldo(conn: sqlite3.Connection, usuario: Usuario, monto: int) -> Resu
       2. movimiento -monto en fondeo y +monto en la cuenta del usuario (suman 0, RNF-D-05)
       3. ajustar ambos saldos
     """
-    raise NotImplementedError
+    monto = validar_monto(monto)
+    cuenta_id = _cuenta_propia(conn, usuario)
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        fondeo_id = repository.obtener_cuenta_fondeo_id(conn)
+        operacion_id = repository.crear_operacion(conn, "CARGA", monto, ahora)
+        repository.crear_movimiento(conn, operacion_id, fondeo_id, -monto, ahora)
+        repository.crear_movimiento(conn, operacion_id, cuenta_id, monto, ahora)
+        repository.ajustar_saldo(conn, fondeo_id, -monto)
+        repository.ajustar_saldo(conn, cuenta_id, monto)
+    return ResultadoOperacion(operacion_id=operacion_id, tipo="CARGA", monto=monto, creada_en=ahora)
 
 
 def transferir(
