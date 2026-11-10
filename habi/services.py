@@ -7,8 +7,18 @@ Las funciones de cuenta reciben el `usuario` autenticado (RNF-SEC-01/02).
 
 import sqlite3
 
-from habi import config
-from habi.dominio import Movimiento, ResultadoOperacion, Usuario
+from habi import config, db, repository, security
+from habi.dominio import (
+    ErrorAutenticacion,
+    ErrorValidacion,
+    Movimiento,
+    NoEncontrado,
+    ResultadoOperacion,
+    SaldoInsuficiente,
+    Usuario,
+)
+
+MENSAJE_CREDENCIALES_INVALIDAS = "Usuario o contraseña incorrectos."
 
 
 # ---------- Validaciones (RNF-U-03, RNF-D-02) ----------
@@ -19,12 +29,40 @@ def validar_monto(monto: object, campo: str = "monto") -> int:
     Reglas: entero (no bool, no float, no texto), entre
     config.MONTO_MINIMO y config.MONTO_MAXIMO, ambos inclusive.
     """
-    raise NotImplementedError
+    # bool es subclase de int: True no puede colarse como 1 COP.
+    if isinstance(monto, bool) or not isinstance(monto, int):
+        raise ErrorValidacion(campo, "debe ser un número entero de pesos (sin decimales)")
+    if monto < config.MONTO_MINIMO:
+        raise ErrorValidacion(campo, f"debe ser mayor o igual a {config.MONTO_MINIMO}")
+    if monto > config.MONTO_MAXIMO:
+        raise ErrorValidacion(campo, f"no puede superar {config.MONTO_MAXIMO}")
+    return monto
 
 
 def validar_credenciales_registro(nombre: str, password: str) -> None:
     """Nombre no vacío; password con al menos config.LONGITUD_MINIMA_PASSWORD caracteres."""
-    raise NotImplementedError
+    if not isinstance(nombre, str) or not nombre.strip():
+        raise ErrorValidacion("nombre", "no puede estar vacío")
+    if nombre.strip().upper() == "FONDEO":
+        raise ErrorValidacion("nombre", "es un nombre reservado del sistema")
+    if not isinstance(password, str) or len(password) < config.LONGITUD_MINIMA_PASSWORD:
+        raise ErrorValidacion(
+            "password", f"debe tener al menos {config.LONGITUD_MINIMA_PASSWORD} caracteres"
+        )
+
+
+def _cuenta_propia(conn: sqlite3.Connection, usuario: Usuario) -> int:
+    """Id de la cuenta del usuario autenticado, leída de la BD (RNF-SEC-02).
+
+    No se confía en `usuario.cuenta_id`: se resuelve a partir del id del usuario,
+    así un objeto Usuario manipulado no permite operar sobre otra cuenta.
+    """
+    if not isinstance(usuario, Usuario):
+        raise ErrorAutenticacion("Debes iniciar sesión.")
+    cuenta = repository.obtener_cuenta_de_usuario(conn, usuario.id)
+    if cuenta is None:
+        raise ErrorAutenticacion("Debes iniciar sesión.")
+    return cuenta["id"]
 
 
 # ---------- Cuentas (RF-01, RF-02) ----------
@@ -35,7 +73,19 @@ def registrar_usuario(conn: sqlite3.Connection, nombre: str, password: str) -> U
     Usuario y cuenta se crean en la misma transacción.
     Si el nombre ya existe -> ErrorValidacion('nombre', ...).
     """
-    raise NotImplementedError
+    validar_credenciales_registro(nombre, password)
+    nombre = nombre.strip()
+    password_hash = security.hash_password(password)  # fuera de la transacción: es lento
+    ahora = db.ahora_iso()
+    try:
+        with db.transaccion(conn):
+            usuario_id = repository.crear_usuario(conn, nombre, password_hash, ahora)
+            cuenta_id = repository.crear_cuenta_usuario(conn, usuario_id, ahora)
+    except sqlite3.IntegrityError as e:
+        if "usuarios.nombre" in str(e):
+            raise ErrorValidacion("nombre", f"'{nombre}' ya está registrado") from e
+        raise
+    return Usuario(id=usuario_id, nombre=nombre, cuenta_id=cuenta_id)
 
 
 def iniciar_sesion(conn: sqlite3.Connection, nombre: str, password: str) -> Usuario:
@@ -43,14 +93,17 @@ def iniciar_sesion(conn: sqlite3.Connection, nombre: str, password: str) -> Usua
 
     Usar el mismo mensaje para "no existe" y "contraseña incorrecta".
     """
-    raise NotImplementedError
+    fila = repository.obtener_usuario_por_nombre(conn, (nombre or "").strip())
+    if fila is None or not security.verificar_password(password or "", fila["password_hash"]):
+        raise ErrorAutenticacion(MENSAJE_CREDENCIALES_INVALIDAS)
+    return Usuario(id=fila["id"], nombre=fila["nombre"], cuenta_id=fila["cuenta_id"])
 
 
 # ---------- Saldo e historial (RF-05, RF-06) ----------
 
 def consultar_saldo(conn: sqlite3.Connection, usuario: Usuario) -> int:
     """RF-05. Saldo en COP de la cuenta del usuario autenticado."""
-    raise NotImplementedError
+    return repository.obtener_saldo(conn, _cuenta_propia(conn, usuario))
 
 
 def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int = 0) -> list[Movimiento]:
