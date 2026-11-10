@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Base de datos local
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# IDE
+.idea/
+
+# Documentos del reto (no se publican)
+*.pdf
