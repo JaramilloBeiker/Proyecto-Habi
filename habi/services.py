@@ -12,13 +12,20 @@ from datetime import datetime, timedelta, timezone
 from habi import config, db, repository, security
 from habi.formato import formatear_cop
 from habi.dominio import (
+    Bolsillo,
     ErrorAutenticacion,
+    ErrorAutorizacion,
     ErrorValidacion,
+    Invitacion,
+    MiembroBolsillo,
     Movimiento,
     NoEncontrado,
+    OperacionNoPermitida,
     ResultadoOperacion,
+    Retiro,
     SaldoInsuficiente,
     Usuario,
+    VotoRetiro,
 )
 
 MENSAJE_CREDENCIALES_INVALIDAS = "Usuario o contraseña incorrectos."
@@ -142,9 +149,17 @@ def consultar_saldo(conn: sqlite3.Connection, usuario: Usuario) -> int:
 
 def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int = 0) -> list[Movimiento]:
     """RF-06. Bloque `pagina` (desde 0) de config.TAMANO_PAGINA_HISTORIAL movimientos, más reciente primero."""
+    _validar_pagina(pagina)
+    return _movimientos_de_cuenta(conn, _cuenta_propia(conn, usuario), pagina)
+
+
+def _validar_pagina(pagina: object) -> None:
     if isinstance(pagina, bool) or not isinstance(pagina, int) or pagina < 0:
         raise ErrorValidacion("pagina", "debe ser un entero mayor o igual a 0")
-    cuenta_id = _cuenta_propia(conn, usuario)
+
+
+def _movimientos_de_cuenta(conn: sqlite3.Connection, cuenta_id: int, pagina: int) -> list[Movimiento]:
+    """Bloque `pagina` de movimientos de una cuenta (personal o de bolsillo)."""
     tamano = config.TAMANO_PAGINA_HISTORIAL
     filas = repository.listar_movimientos(conn, cuenta_id, tamano, pagina * tamano)
     return [
@@ -155,6 +170,7 @@ def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int 
             monto=f["monto"],
             contraparte=f["contraparte"],
             creado_en=f["creado_en"],
+            contraparte_tipo=f["contraparte_tipo"],
         )
         for f in filas
     ]
@@ -208,20 +224,35 @@ def transferir(
     if destino["cuenta_id"] == origen_id:
         raise ErrorValidacion("destino", "no puedes transferirte a ti mismo")
 
-    ahora = db.ahora_iso()
     with db.transaccion(conn):
-        previa = repository.obtener_operacion_por_clave(conn, clave_idempotencia)
-        if previa is not None:
-            return _resultado_repetido(conn, previa, origen_id, destino["cuenta_id"], monto)
-        if not repository.debitar_si_alcanza(conn, origen_id, monto):
-            raise SaldoInsuficiente(
-                f"Saldo insuficiente: tienes {formatear_cop(repository.obtener_saldo(conn, origen_id))} "
-                f"y quieres transferir {formatear_cop(monto)}."
-            )
-        repository.ajustar_saldo(conn, destino["cuenta_id"], monto)
-        operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)
-        repository.crear_movimiento(conn, operacion_id, origen_id, -monto, ahora)
-        repository.crear_movimiento(conn, operacion_id, destino["cuenta_id"], monto, ahora)
+        return _mover_dinero(conn, origen_id, destino["cuenta_id"], monto, clave_idempotencia)
+
+
+def _mover_dinero(
+    conn: sqlite3.Connection, origen_id: int, destino_id: int, monto: int, clave_idempotencia: str,
+    verbo: str = "transferir",
+) -> ResultadoOperacion:
+    """Núcleo de una transferencia entre dos cuentas. Debe llamarse DENTRO de db.transaccion.
+
+    Lo usan las transferencias entre personas y Juntia (aportes y retiros):
+      1. si la clave ya existe -> resultado original con repetida=True (RNF-R-03)
+      2. debitar_si_alcanza(origen); si False -> SaldoInsuficiente (rollback, sin movimientos)
+      3. acreditar destino
+      4. crear operación 'TRANSFERENCIA' y los dos movimientos (-monto / +monto)
+    """
+    ahora = db.ahora_iso()
+    previa = repository.obtener_operacion_por_clave(conn, clave_idempotencia)
+    if previa is not None:
+        return _resultado_repetido(conn, previa, origen_id, destino_id, monto)
+    if not repository.debitar_si_alcanza(conn, origen_id, monto):
+        raise SaldoInsuficiente(
+            f"Saldo insuficiente: tienes {formatear_cop(repository.obtener_saldo(conn, origen_id))} "
+            f"y quieres {verbo} {formatear_cop(monto)}."
+        )
+    repository.ajustar_saldo(conn, destino_id, monto)
+    operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)
+    repository.crear_movimiento(conn, operacion_id, origen_id, -monto, ahora)
+    repository.crear_movimiento(conn, operacion_id, destino_id, monto, ahora)
     return ResultadoOperacion(
         operacion_id=operacion_id,
         tipo="TRANSFERENCIA",
@@ -254,3 +285,329 @@ def _resultado_repetido(
         clave_idempotencia=previa["clave_idempotencia"],
         repetida=True,
     )
+
+
+# ---------- Juntia: bolsillos, miembros e invitaciones ----------
+#
+# Un bolsillo es una cuenta compartida (tipo BOLSILLO). Quien lo crea queda como
+# miembro ACTIVO; a los demás se les invita y deben aceptar para ver el saldo.
+
+def _validar_datos_bolsillo(nombre: object, meta: object) -> tuple[str, int]:
+    if not isinstance(nombre, str) or not nombre.strip():
+        raise ErrorValidacion("nombre", "no puede estar vacío")
+    nombre = nombre.strip()
+    if len(nombre) > config.LONGITUD_MAXIMA_NOMBRE_BOLSILLO:
+        raise ErrorValidacion(
+            "nombre", f"no puede tener más de {config.LONGITUD_MAXIMA_NOMBRE_BOLSILLO} caracteres"
+        )
+    if isinstance(meta, bool) or not isinstance(meta, int):
+        raise ErrorValidacion("meta", "debe ser un número entero de pesos (sin decimales)")
+    if meta < config.MONTO_MINIMO:
+        raise ErrorValidacion("meta", f"debe ser mayor o igual a {formatear_cop(config.MONTO_MINIMO)}")
+    if meta > config.META_MAXIMA_BOLSILLO:
+        raise ErrorValidacion("meta", f"no puede superar {formatear_cop(config.META_MAXIMA_BOLSILLO)}")
+    return nombre, meta
+
+
+def _bolsillo_de_miembro_activo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> sqlite3.Row:
+    """Devuelve el bolsillo si el usuario es miembro activo; si no, el error adecuado.
+
+    A quien no fue invitado se le responde que no existe, para no revelar bolsillos ajenos.
+    """
+    _cuenta_propia(conn, usuario)  # exige sesión válida
+    bolsillo = repository.obtener_bolsillo(conn, bolsillo_id)
+    estado = repository.obtener_estado_miembro(conn, bolsillo_id, usuario.id) if bolsillo else None
+    if bolsillo is None or estado is None:
+        raise NoEncontrado("El bolsillo no existe.")
+    if estado == "INVITADO":
+        raise ErrorAutorizacion("Debes aceptar la invitación para ver este bolsillo.")
+    if estado != "ACTIVO":
+        raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")
+    return bolsillo
+
+
+def _a_bolsillo(fila: sqlite3.Row) -> Bolsillo:
+    return Bolsillo(
+        id=fila["id"],
+        nombre=fila["nombre"],
+        meta=fila["meta"],
+        saldo=fila["saldo"],
+        reservado=fila["reservado"],
+        creador=fila["creador"],
+        creado_en=fila["creado_en"],
+    )
+
+
+def crear_bolsillo(conn: sqlite3.Connection, usuario: Usuario, nombre: str, meta: int) -> Bolsillo:
+    """Crea el bolsillo con su cuenta (saldo 0) y deja al creador como miembro ACTIVO."""
+    nombre, meta = _validar_datos_bolsillo(nombre, meta)
+    _cuenta_propia(conn, usuario)
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        cuenta_id = repository.crear_cuenta_bolsillo(conn, ahora)
+        bolsillo_id = repository.crear_bolsillo(conn, cuenta_id, nombre, meta, usuario.id, ahora)
+        repository.guardar_miembro(conn, bolsillo_id, usuario.id, "ACTIVO", None, ahora)
+    return ver_bolsillo(conn, usuario, bolsillo_id)
+
+
+def ver_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> Bolsillo:
+    """Detalle del bolsillo con su saldo y lo reservado. Solo para miembros activos."""
+    _expirar_retiros(conn)
+    return _a_bolsillo(_bolsillo_de_miembro_activo(conn, usuario, bolsillo_id))
+
+
+def listar_bolsillos(conn: sqlite3.Connection, usuario: Usuario) -> list[Bolsillo]:
+    """Bolsillos donde el usuario es miembro activo."""
+    _cuenta_propia(conn, usuario)
+    _expirar_retiros(conn)
+    return [_a_bolsillo(f) for f in repository.listar_bolsillos_activos(conn, usuario.id)]
+
+
+def listar_invitaciones(conn: sqlite3.Connection, usuario: Usuario) -> list[Invitacion]:
+    """Invitaciones pendientes del usuario (sin saldo: aún no las acepta)."""
+    _cuenta_propia(conn, usuario)
+    return [
+        Invitacion(
+            bolsillo_id=f["bolsillo_id"],
+            bolsillo_nombre=f["bolsillo_nombre"],
+            invitado_por=f["invitado_por"],
+            fecha=f["fecha"],
+        )
+        for f in repository.listar_invitaciones(conn, usuario.id)
+    ]
+
+
+def miembros_de_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> list[MiembroBolsillo]:
+    """Miembros activos e invitados pendientes. Solo para miembros activos."""
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    return [
+        MiembroBolsillo(nombre=f["nombre"], estado=f["estado"], aportado=f["aportado"])
+        for f in repository.listar_miembros(conn, bolsillo_id)
+    ]
+
+
+def invitar_a_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, nombre_invitado: str) -> None:
+    """Un miembro activo invita a otro usuario de Habi.
+
+    Se puede volver a invitar a quien rechazó o salió; no a quien ya es miembro
+    o tiene una invitación pendiente.
+    """
+    if not isinstance(nombre_invitado, str) or not nombre_invitado.strip():
+        raise ErrorValidacion("invitado", "es obligatorio")
+    nombre_invitado = nombre_invitado.strip()
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    invitado = repository.obtener_usuario_por_nombre(conn, nombre_invitado)
+    if invitado is None:
+        raise NoEncontrado(f"El usuario '{nombre_invitado}' no existe.")
+
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        estado = repository.obtener_estado_miembro(conn, bolsillo_id, invitado["id"])
+        if estado == "ACTIVO":
+            raise ErrorValidacion("invitado", "ya es miembro del bolsillo")
+        if estado == "INVITADO":
+            raise ErrorValidacion("invitado", "ya tiene una invitación pendiente")
+        repository.guardar_miembro(conn, bolsillo_id, invitado["id"], "INVITADO", usuario.id, ahora)
+
+
+def _responder_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, estado_nuevo: str) -> None:
+    _cuenta_propia(conn, usuario)
+    if repository.obtener_bolsillo(conn, bolsillo_id) is None:
+        raise NoEncontrado("El bolsillo no existe.")
+    with db.transaccion(conn):
+        cambiado = repository.cambiar_estado_miembro(
+            conn, bolsillo_id, usuario.id, "INVITADO", estado_nuevo, db.ahora_iso()
+        )
+        if not cambiado:
+            raise OperacionNoPermitida("No tienes una invitación pendiente para este bolsillo.")
+
+
+def aceptar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> Bolsillo:
+    """El invitado pasa a miembro ACTIVO y desde ahí puede ver el saldo."""
+    _responder_invitacion(conn, usuario, bolsillo_id, "ACTIVO")
+    return ver_bolsillo(conn, usuario, bolsillo_id)
+
+
+def rechazar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> None:
+    _responder_invitacion(conn, usuario, bolsillo_id, "RECHAZADO")
+
+
+# ---------- Juntia: aportes, historial y salida ----------
+
+def aportar_a_bolsillo(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, monto: int, clave_idempotencia: str
+) -> ResultadoOperacion:
+    """Un miembro activo pasa dinero de su cuenta personal al bolsillo.
+
+    Es una transferencia normal hacia la cuenta del bolsillo: misma validación de
+    monto, misma verificación de saldo y misma clave de idempotencia (RNF-R-03).
+    """
+    monto = validar_monto(monto)
+    if not isinstance(clave_idempotencia, str) or not clave_idempotencia.strip():
+        raise ErrorValidacion("clave_idempotencia", "es obligatoria")
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    origen_id = _cuenta_propia(conn, usuario)
+    with db.transaccion(conn):
+        # Se vuelve a mirar dentro de la transacción: pudo haber salido del bolsillo justo antes.
+        if repository.obtener_estado_miembro(conn, bolsillo_id, usuario.id) != "ACTIVO":
+            raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")
+        return _mover_dinero(conn, origen_id, bolsillo["cuenta_id"], monto, clave_idempotencia, "aportar")
+
+
+def historial_bolsillo(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, pagina: int = 0
+) -> list[Movimiento]:
+    """Movimientos del bolsillo (aportes y retiros), más reciente primero. Solo miembros activos."""
+    _validar_pagina(pagina)
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    return _movimientos_de_cuenta(conn, bolsillo["cuenta_id"], pagina)
+
+
+def salir_de_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> None:
+    """Un miembro activo deja el bolsillo. Quien ya aportó no puede salir."""
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    cuenta_id = _cuenta_propia(conn, usuario)
+    _expirar_retiros(conn)
+    with db.transaccion(conn):
+        if repository.total_aportado(conn, bolsillo["cuenta_id"], cuenta_id) > 0:
+            raise OperacionNoPermitida("Ya aportaste a este bolsillo, así que no puedes salir.")
+        # Su voto es necesario para cerrar esos retiros: debe votar antes de irse.
+        if repository.tiene_voto_pendiente(conn, bolsillo_id, usuario.id):
+            raise OperacionNoPermitida("Tienes retiros pendientes por votar; vota antes de salir.")
+        if not repository.cambiar_estado_miembro(conn, bolsillo_id, usuario.id, "ACTIVO", "SALIO", db.ahora_iso()):
+            raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")
+
+
+# ---------- Juntia: retiros con votación ----------
+#
+# Retirar es una propuesta. Mientras está PENDIENTE su monto queda reservado.
+# Se ejecuta solo si votan a favor TODOS los miembros que estaban activos al
+# proponerla; un voto en contra la rechaza. Sin respuesta en
+# config.DIAS_EXPIRACION_RETIRO días expira. La expiración es pasiva: no hay
+# tareas en segundo plano, se revisa la fecha cada vez que se consulta o se vota.
+
+VOTOS_VALIDOS = ("A_FAVOR", "EN_CONTRA")
+
+
+def _expirar_retiros(conn: sqlite3.Connection) -> None:
+    """Marca como EXPIRADO cualquier retiro pendiente vencido (libera su reserva)."""
+    with db.transaccion(conn):
+        repository.expirar_retiros_vencidos(conn, db.ahora_iso())
+
+
+def _a_retiro(conn: sqlite3.Connection, fila: sqlite3.Row) -> Retiro:
+    votos = tuple(VotoRetiro(nombre=v["nombre"], voto=v["voto"]) for v in repository.listar_votos(conn, fila["id"]))
+    return Retiro(
+        id=fila["id"],
+        bolsillo_id=fila["bolsillo_id"],
+        monto=fila["monto"],
+        destino=fila["destino"],
+        proponente=fila["proponente"],
+        motivo=fila["motivo"],
+        estado=fila["estado"],
+        creado_en=fila["creado_en"],
+        expira_en=fila["expira_en"],
+        cerrado_en=fila["cerrado_en"],
+        votos=votos,
+    )
+
+
+def _ejecutar_si_aprobado(conn: sqlite3.Connection, retiro: sqlite3.Row, cuenta_bolsillo_id: int) -> None:
+    """Si todos votaron a favor, transfiere el dinero al destino. Va DENTRO de una transacción.
+
+    La clave 'retiro-<id>' hace que un mismo retiro nunca genere dos transferencias.
+    """
+    conteo = repository.contar_votos(conn, retiro["id"])
+    if conteo["a_favor"] < conteo["total"]:
+        return
+    resultado = _mover_dinero(
+        conn, cuenta_bolsillo_id, retiro["destino_cuenta_id"], retiro["monto"], f"retiro-{retiro['id']}", "retirar"
+    )
+    repository.cerrar_retiro(conn, retiro["id"], "EJECUTADO", db.ahora_iso(), resultado.operacion_id)
+
+
+def proponer_retiro(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, nombre_destino: str, monto: int, motivo: str = ""
+) -> Retiro:
+    """Un miembro activo propone sacar dinero del bolsillo hacia cualquier usuario de Habi.
+
+    Quien propone vota a favor automáticamente. Si es el único miembro activo,
+    el retiro se ejecuta de inmediato.
+    """
+    monto = validar_monto(monto)
+    if not isinstance(nombre_destino, str) or not nombre_destino.strip():
+        raise ErrorValidacion("destino", "es obligatorio")
+    motivo = motivo.strip() if isinstance(motivo, str) else ""
+    if len(motivo) > config.LONGITUD_MAXIMA_MOTIVO_RETIRO:
+        raise ErrorValidacion("motivo", f"no puede tener más de {config.LONGITUD_MAXIMA_MOTIVO_RETIRO} caracteres")
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    destino = repository.obtener_usuario_por_nombre(conn, nombre_destino.strip())
+    if destino is None:
+        raise NoEncontrado(f"El usuario destino '{nombre_destino.strip()}' no existe.")
+
+    _expirar_retiros(conn)
+    ahora = datetime.now(timezone.utc)
+    creado_en = ahora.isoformat(timespec="seconds")
+    expira_en = (ahora + timedelta(days=config.DIAS_EXPIRACION_RETIRO)).isoformat(timespec="seconds")
+    with db.transaccion(conn):
+        # Saldo y reservas se leen dentro de la transacción (BEGIN IMMEDIATE):
+        # dos propuestas simultáneas no pueden reservar el mismo dinero.
+        bolsillo = repository.obtener_bolsillo(conn, bolsillo_id)
+        disponible = bolsillo["saldo"] - bolsillo["reservado"]
+        if monto > disponible:
+            raise SaldoInsuficiente(
+                f"El bolsillo tiene {formatear_cop(disponible)} disponibles "
+                f"(saldo {formatear_cop(bolsillo['saldo'])}, reservado {formatear_cop(bolsillo['reservado'])}) "
+                f"y quieres retirar {formatear_cop(monto)}."
+            )
+        retiro_id = repository.crear_retiro(
+            conn, bolsillo_id, usuario.id, destino["id"], monto, motivo, creado_en, expira_en
+        )
+        # Foto de los miembros activos en este momento: solo ellos votan.
+        for miembro_id in repository.usuarios_activos_de_bolsillo(conn, bolsillo_id):
+            if miembro_id == usuario.id:
+                repository.crear_voto(conn, retiro_id, miembro_id, "A_FAVOR", creado_en)
+            else:
+                repository.crear_voto(conn, retiro_id, miembro_id, None, None)
+        _ejecutar_si_aprobado(conn, repository.obtener_retiro(conn, retiro_id), bolsillo["cuenta_id"])
+    return _a_retiro(conn, repository.obtener_retiro(conn, retiro_id))
+
+
+def votar_retiro(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, retiro_id: int, voto: str
+) -> Retiro:
+    """Registra el voto del usuario. En contra -> RECHAZADO. Todos a favor -> EJECUTADO."""
+    if voto not in VOTOS_VALIDOS:
+        raise ErrorValidacion("voto", "debe ser A_FAVOR o EN_CONTRA")
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    _expirar_retiros(conn)
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        retiro = repository.obtener_retiro(conn, retiro_id)
+        if retiro is None or retiro["bolsillo_id"] != bolsillo_id:
+            raise NoEncontrado("El retiro no existe.")
+        if retiro["estado"] == "EXPIRADO" or (retiro["estado"] == "PENDIENTE" and retiro["expira_en"] <= ahora):
+            raise OperacionNoPermitida(
+                f"Este retiro expiró: pasaron {config.DIAS_EXPIRACION_RETIRO} días sin la respuesta de todos."
+            )
+        if retiro["estado"] != "PENDIENTE":
+            raise OperacionNoPermitida("Este retiro ya se cerró; no admite más votos.")
+        fila_voto = repository.obtener_voto(conn, retiro_id, usuario.id)
+        if fila_voto is None:
+            raise ErrorAutorizacion("No puedes votar este retiro: no eras miembro activo cuando se propuso.")
+        if not repository.registrar_voto(conn, retiro_id, usuario.id, voto, ahora):
+            raise OperacionNoPermitida("Ya votaste este retiro.")
+
+        if voto == "EN_CONTRA":
+            repository.cerrar_retiro(conn, retiro_id, "RECHAZADO", ahora)
+        else:
+            _ejecutar_si_aprobado(conn, retiro, bolsillo["cuenta_id"])
+    return _a_retiro(conn, repository.obtener_retiro(conn, retiro_id))
+
+
+def listar_retiros(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> list[Retiro]:
+    """Retiros del bolsillo con sus votos: pendientes primero. Solo miembros activos."""
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    _expirar_retiros(conn)
+    filas = repository.listar_retiros(conn, bolsillo_id, config.RETIROS_POR_BOLSILLO)
+    return [_a_retiro(conn, f) for f in filas]

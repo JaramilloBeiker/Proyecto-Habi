@@ -13,8 +13,9 @@
 {% endmacro %}
 
 
-{# Tabla de movimientos (RF-06). Montos en COP y fechas ISO 8601 (RNF-U-02). #}
-{% macro tabla_movimientos(movimientos) %}
+{# Tabla de movimientos (RF-06). Montos en COP y fechas ISO 8601 (RNF-U-02).
+   Con de_bolsillo=true se muestran desde el punto de vista de una Juntia. #}
+{% macro tabla_movimientos(movimientos, de_bolsillo=false) %}
     <div class="tabla-contenedor">
         <table class="tabla">
             <thead>
@@ -31,6 +32,8 @@
                         <td class="tabla__fecha"><time datetime="{{ m.creado_en }}">{{ m.creado_en }}</time></td>
                         <td class="tabla__concepto">
                             {% if m.tipo_operacion == "CARGA" %}Carga de saldo
+                            {% elif de_bolsillo %}{{ "Aporte" if m.monto > 0 else "Retiro" }}
+                            {% elif m.contraparte_tipo == "BOLSILLO" %}{{ "Aporte a Juntia" if m.monto < 0 else "Retiro de Juntia" }}
                             {% elif m.monto < 0 %}Transferencia enviada
                             {% else %}Transferencia recibida{% endif %}
                         </td>
@@ -43,4 +46,15 @@
             </tbody>
         </table>
     </div>
+{% endmacro %}
+
+
+{# Barra de avance de un bolsillo hacia su meta. #}
+{% macro progreso(bolsillo) %}
+    {% set porcentaje = [100, (bolsillo.saldo * 100) // bolsillo.meta] | min %}
+    <div class="progreso" role="progressbar" aria-valuenow="{{ porcentaje }}" aria-valuemin="0" aria-valuemax="100"
+         aria-label="Avance hacia la meta">
+        <div class="progreso__barra" style="width: {{ porcentaje }}%"></div>
+    </div>
+    <p class="progreso__texto texto-suave">{{ porcentaje }} % de la meta de {{ bolsillo.meta | cop }}</p>
 {% endmacro %}

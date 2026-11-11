@@ -21,6 +21,7 @@ from habi.dominio import (
     ErrorValidacion,
     HabiError,
     NoEncontrado,
+    OperacionNoPermitida,
     SaldoInsuficiente,
 )
 from habi.formato import formatear_cop
@@ -109,7 +110,49 @@ def movimiento_a_dict(m) -> dict:
         "monto": m.monto,
         "monto_cop": ("+" if m.monto > 0 else "") + formatear_cop(m.monto),
         "contraparte": m.contraparte,
+        "contraparte_tipo": m.contraparte_tipo,
         "fecha": m.creado_en,
+    }
+
+
+def leer_clave(datos: dict) -> str:
+    """Clave de idempotencia del formulario. Debe ser un uuid4 entregado por el sistema (RNF-R-03)."""
+    clave = leer_texto(datos, "clave_idempotencia").strip()
+    try:
+        uuid.UUID(clave)
+    except ValueError:
+        raise ErrorValidacion("clave_idempotencia", "no es válida; pide una nueva al sistema")
+    return clave
+
+
+def bolsillo_a_dict(b) -> dict:
+    return {
+        "id": b.id,
+        "nombre": b.nombre,
+        "meta": b.meta,
+        "saldo": b.saldo,
+        "reservado": b.reservado,
+        "disponible": b.disponible,
+        "saldo_cop": formatear_cop(b.saldo),
+        "disponible_cop": formatear_cop(b.disponible),
+        "creador": b.creador,
+        "creado_en": b.creado_en,
+    }
+
+
+def retiro_a_dict(r) -> dict:
+    return {
+        "id": r.id,
+        "monto": r.monto,
+        "monto_cop": formatear_cop(r.monto),
+        "destino": r.destino,
+        "proponente": r.proponente,
+        "motivo": r.motivo,
+        "estado": r.estado,
+        "creado_en": r.creado_en,
+        "expira_en": r.expira_en,
+        "cerrado_en": r.cerrado_en,
+        "votos": [{"nombre": v.nombre, "voto": v.voto} for v in r.votos],
     }
 
 
@@ -143,7 +186,7 @@ def manejar_error_negocio(error: HabiError):
         codigo = 403
     elif isinstance(error, NoEncontrado):
         codigo = 404
-    elif isinstance(error, SaldoInsuficiente):
+    elif isinstance(error, (SaldoInsuficiente, OperacionNoPermitida)):
         codigo = 409
     else:
         codigo = 400
@@ -241,11 +284,7 @@ def transferir():
     datos = leer_datos()
     destino = leer_texto(datos, "destino")
     monto = leer_entero(datos.get("monto"), "monto")
-    clave = leer_texto(datos, "clave_idempotencia").strip()
-    try:
-        uuid.UUID(clave)
-    except ValueError:
-        raise ErrorValidacion("clave_idempotencia", "no es válida; pide una nueva al sistema")
+    clave = leer_clave(datos)
 
     conn = obtener_conexion()
     resultado = services.transferir(conn, usuario, destino, monto, clave)
@@ -265,3 +304,146 @@ def transferir():
         saldo=saldo_actual,
         saldo_cop=formatear_cop(saldo_actual),
     )
+
+
+# ---------- Juntia: bolsillos compartidos ----------
+
+@api.get("/juntias")
+def juntias():
+    usuario = usuario_actual()
+    conn = obtener_conexion()
+    return respuesta_ok(
+        "Bolsillos consultados.",
+        bolsillos=[bolsillo_a_dict(b) for b in services.listar_bolsillos(conn, usuario)],
+        invitaciones=[
+            {"bolsillo_id": i.bolsillo_id, "bolsillo": i.bolsillo_nombre, "invitado_por": i.invitado_por, "fecha": i.fecha}
+            for i in services.listar_invitaciones(conn, usuario)
+        ],
+    )
+
+
+@api.post("/juntias")
+def crear_juntia():
+    usuario = usuario_actual()
+    datos = leer_datos()
+    meta = leer_entero(datos.get("meta"), "meta")
+    bolsillo = services.crear_bolsillo(obtener_conexion(), usuario, leer_texto(datos, "nombre"), meta)
+    return respuesta_ok(f"Bolsillo '{bolsillo.nombre}' creado.", 201, bolsillo=bolsillo_a_dict(bolsillo))
+
+
+@api.get("/juntias/<int:bolsillo_id>")
+def ver_juntia(bolsillo_id):
+    usuario = usuario_actual()
+    conn = obtener_conexion()
+    bolsillo = services.ver_bolsillo(conn, usuario, bolsillo_id)
+    return respuesta_ok(
+        "Bolsillo consultado.",
+        bolsillo=bolsillo_a_dict(bolsillo),
+        miembros=[
+            {"nombre": m.nombre, "estado": m.estado, "aportado": m.aportado}
+            for m in services.miembros_de_bolsillo(conn, usuario, bolsillo_id)
+        ],
+        retiros=[retiro_a_dict(r) for r in services.listar_retiros(conn, usuario, bolsillo_id)],
+    )
+
+
+@api.post("/juntias/<int:bolsillo_id>/invitaciones")
+def invitar(bolsillo_id):
+    usuario = usuario_actual()
+    invitado = leer_texto(leer_datos(), "invitado")
+    services.invitar_a_bolsillo(obtener_conexion(), usuario, bolsillo_id, invitado)
+    return respuesta_ok(f"Invitación enviada a '{invitado.strip()}'.", 201)
+
+
+@api.post("/juntias/<int:bolsillo_id>/aceptar")
+def aceptar(bolsillo_id):
+    bolsillo = services.aceptar_invitacion(obtener_conexion(), usuario_actual(), bolsillo_id)
+    return respuesta_ok(f"Ahora eres miembro de '{bolsillo.nombre}'.", bolsillo=bolsillo_a_dict(bolsillo))
+
+
+@api.post("/juntias/<int:bolsillo_id>/rechazar")
+def rechazar(bolsillo_id):
+    services.rechazar_invitacion(obtener_conexion(), usuario_actual(), bolsillo_id)
+    return respuesta_ok("Invitación rechazada.")
+
+
+@api.post("/juntias/<int:bolsillo_id>/salir")
+def salir_de_juntia(bolsillo_id):
+    services.salir_de_bolsillo(obtener_conexion(), usuario_actual(), bolsillo_id)
+    return respuesta_ok("Saliste del bolsillo.")
+
+
+@api.get("/juntias/<int:bolsillo_id>/aportes/nueva")
+def nuevo_aporte(bolsillo_id):
+    """Clave única que el formulario de aporte debe reenviar (RNF-R-03)."""
+    services.ver_bolsillo(obtener_conexion(), usuario_actual(), bolsillo_id)
+    return respuesta_ok("Clave de aporte generada.", clave_idempotencia=str(uuid.uuid4()))
+
+
+@api.post("/juntias/<int:bolsillo_id>/aportes")
+def aportar(bolsillo_id):
+    usuario = usuario_actual()
+    datos = leer_datos()
+    monto = leer_entero(datos.get("monto"), "monto")
+    clave = leer_clave(datos)
+    conn = obtener_conexion()
+    resultado = services.aportar_a_bolsillo(conn, usuario, bolsillo_id, monto, clave)
+    bolsillo = services.ver_bolsillo(conn, usuario, bolsillo_id)
+    if resultado.repetida:
+        mensaje = "Este aporte ya se había realizado; no se repitió."
+    else:
+        mensaje = f"Aporte de {formatear_cop(resultado.monto)} a '{bolsillo.nombre}' realizado."
+    return respuesta_ok(
+        mensaje,
+        200 if resultado.repetida else 201,
+        operacion_id=resultado.operacion_id,
+        monto=resultado.monto,
+        repetida=resultado.repetida,
+        bolsillo=bolsillo_a_dict(bolsillo),
+    )
+
+
+@api.get("/juntias/<int:bolsillo_id>/historial")
+def historial_juntia(bolsillo_id):
+    usuario = usuario_actual()
+    pagina = leer_entero(request.args.get("pagina", "0"), "pagina")
+    movimientos = services.historial_bolsillo(obtener_conexion(), usuario, bolsillo_id, pagina)
+    return respuesta_ok(
+        "Historial del bolsillo consultado.",
+        pagina=pagina,
+        tamano_pagina=config.TAMANO_PAGINA_HISTORIAL,
+        hay_mas=len(movimientos) == config.TAMANO_PAGINA_HISTORIAL,
+        movimientos=[movimiento_a_dict(m) for m in movimientos],
+    )
+
+
+@api.post("/juntias/<int:bolsillo_id>/retiros")
+def proponer_retiro(bolsillo_id):
+    usuario = usuario_actual()
+    datos = leer_datos()
+    monto = leer_entero(datos.get("monto"), "monto")
+    retiro = services.proponer_retiro(
+        obtener_conexion(), usuario, bolsillo_id, leer_texto(datos, "destino"), monto, leer_texto(datos, "motivo")
+    )
+    if retiro.estado == "EJECUTADO":
+        mensaje = f"Retiro de {formatear_cop(retiro.monto)} a '{retiro.destino}' realizado."
+    else:
+        mensaje = f"Retiro de {formatear_cop(retiro.monto)} propuesto; espera los votos de los demás miembros."
+    return respuesta_ok(mensaje, 201, retiro=retiro_a_dict(retiro))
+
+
+@api.post("/juntias/<int:bolsillo_id>/retiros/<int:retiro_id>/votos")
+def votar(bolsillo_id, retiro_id):
+    usuario = usuario_actual()
+    voto = leer_texto(leer_datos(), "voto").strip().upper()
+    retiro = services.votar_retiro(obtener_conexion(), usuario, bolsillo_id, retiro_id, voto)
+    return respuesta_ok(mensaje_de_voto(retiro), retiro=retiro_a_dict(retiro))
+
+
+def mensaje_de_voto(retiro) -> str:
+    """Texto para el usuario según cómo quedó el retiro después de su voto."""
+    if retiro.estado == "EJECUTADO":
+        return f"Todos votaron a favor: se enviaron {formatear_cop(retiro.monto)} a {retiro.destino}."
+    if retiro.estado == "RECHAZADO":
+        return "Votaste en contra: el retiro se canceló y el dinero reservado quedó libre."
+    return "Voto registrado; faltan votos de otros miembros."
