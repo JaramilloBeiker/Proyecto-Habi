@@ -198,6 +198,8 @@ def transferir(
     monto = validar_monto(monto)
     if not isinstance(clave_idempotencia, str) or not clave_idempotencia.strip():
         raise ErrorValidacion("clave_idempotencia", "es obligatoria")
+    if not isinstance(nombre_destino, str) or not nombre_destino.strip():
+        raise ErrorValidacion("destino", "es obligatorio")
     origen_id = _cuenta_propia(conn, usuario)
     destino = repository.obtener_usuario_por_nombre(conn, (nombre_destino or "").strip())
     if destino is None:

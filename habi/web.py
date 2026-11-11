@@ -9,6 +9,7 @@ Respuestas:
     error -> {"ok": false, "error": "motivo", "campo": "monto" | null}   (RNF-U-01, RNF-U-03)
 """
 
+import uuid
 from datetime import timedelta
 
 from flask import Blueprint, Flask, current_app, g, jsonify, request, session
@@ -210,4 +211,45 @@ def historial():
         tamano_pagina=config.TAMANO_PAGINA_HISTORIAL,
         hay_mas=len(movimientos) == config.TAMANO_PAGINA_HISTORIAL,
         movimientos=[movimiento_a_dict(m) for m in movimientos],
+    )
+
+
+# ---------- Transferencias (RF-04, RNF-R-03) ----------
+
+@api.get("/transferencias/nueva")
+def nueva_transferencia():
+    """Entrega la clave única que el formulario de transferencia debe reenviar (RNF-R-03)."""
+    usuario_actual()
+    return respuesta_ok("Clave de transferencia generada.", clave_idempotencia=str(uuid.uuid4()))
+
+
+@api.post("/transferencias")
+def transferir():
+    usuario = usuario_actual()
+    datos = leer_datos()
+    destino = leer_texto(datos, "destino")
+    monto = leer_entero(datos.get("monto"), "monto")
+    clave = leer_texto(datos, "clave_idempotencia").strip()
+    try:
+        uuid.UUID(clave)
+    except ValueError:
+        raise ErrorValidacion("clave_idempotencia", "no es válida; pide una nueva al sistema")
+
+    conn = obtener_conexion()
+    resultado = services.transferir(conn, usuario, destino, monto, clave)
+    saldo_actual = services.consultar_saldo(conn, usuario)
+    if resultado.repetida:
+        mensaje = "Esta transferencia ya se había realizado; no se repitió."
+    else:
+        mensaje = f"Transferencia de {formatear_cop(resultado.monto)} a '{destino.strip()}' realizada."
+    return respuesta_ok(
+        mensaje,
+        200 if resultado.repetida else 201,
+        operacion_id=resultado.operacion_id,
+        monto=resultado.monto,
+        fecha=resultado.creada_en,
+        clave_idempotencia=resultado.clave_idempotencia,
+        repetida=resultado.repetida,
+        saldo=saldo_actual,
+        saldo_cop=formatear_cop(saldo_actual),
     )
