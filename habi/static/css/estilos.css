@@ -410,3 +410,64 @@ main.contenedor {
     display: none;
 }
 
+/* Campos numéricos sin flechas: el monto se escribe, no se ajusta de a 1. */
+.campo input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.campo input[type="number"]::-webkit-inner-spin-button,
+.campo input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* En celular cada movimiento se apila: concepto y monto arriba, contraparte y fecha abajo. */
+@media (max-width: 600px) {
+    .tabla thead {
+        display: none;
+    }
+
+    .tabla tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 12px;
+        row-gap: 2px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--borde);
+    }
+
+    .tabla tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    .tabla td {
+        padding: 0 !important;
+        border: none;
+        white-space: normal;
+    }
+
+    .tabla__concepto {
+        order: 1;
+        font-weight: 600;
+    }
+
+    .tabla__monto {
+        order: 2;
+    }
+
+    .tabla__contraparte,
+    .tabla__fecha {
+        grid-column: 1 / -1;
+        font-size: 13px;
+        color: var(--texto-suave);
+    }
+
+    .tabla__contraparte {
+        order: 3;
+    }
+
+    .tabla__fecha {
+        order: 4;
+    }
+}

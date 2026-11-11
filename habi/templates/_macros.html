@@ -29,12 +29,12 @@
                 {% for m in movimientos %}
                     <tr>
                         <td class="tabla__fecha"><time datetime="{{ m.creado_en }}">{{ m.creado_en }}</time></td>
-                        <td>
+                        <td class="tabla__concepto">
                             {% if m.tipo_operacion == "CARGA" %}Carga de saldo
                             {% elif m.monto < 0 %}Transferencia enviada
                             {% else %}Transferencia recibida{% endif %}
                         </td>
-                        <td>{{ "Cuenta de fondeo" if m.contraparte == "FONDEO" else m.contraparte }}</td>
+                        <td class="tabla__contraparte">{{ "Cuenta de fondeo" if m.contraparte == "FONDEO" else m.contraparte }}</td>
                         <td class="tabla__monto {{ 'monto--positivo' if m.monto > 0 else 'monto--negativo' }}">
                             {{ "+" if m.monto > 0 else "" }}{{ m.monto | cop }}
                         </td>
