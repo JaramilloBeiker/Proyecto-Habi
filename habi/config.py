@@ -1,6 +1,7 @@
 """Configuración central del sistema. Valores sobreescribibles por variables de entorno."""
 
 import os
+import secrets
 from pathlib import Path
 
 RAIZ_PROYECTO = Path(__file__).resolve().parent.parent
@@ -22,3 +23,9 @@ TAMANO_PAGINA_HISTORIAL = 20
 # Contraseñas (RNF-SEC-01). En pruebas se baja para que la suite sea rápida.
 PBKDF2_ALGORITMO = "sha256"
 PBKDF2_ITERACIONES = int(os.environ.get("HABI_PBKDF2_ITERACIONES", 600_000))
+
+# Sesión web (RNF-SEC-01). La cookie va firmada con SECRET_KEY y expira a los 60 minutos.
+# Si no se define HABI_SECRET_KEY se genera una al arrancar: las sesiones abiertas
+# se pierden al reiniciar, pero los datos de la base no.
+SECRET_KEY = os.environ.get("HABI_SECRET_KEY") or secrets.token_hex(32)
+DURACION_SESION_MINUTOS = 60

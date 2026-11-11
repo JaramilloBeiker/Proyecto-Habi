@@ -4,14 +4,10 @@ import uuid
 
 from habi import config, db, services
 from habi.dominio import ErrorValidacion, HabiError, Usuario
+from habi.formato import formatear_cop
 
 
 # ---------- Presentación (RNF-U-02) ----------
-
-def formatear_cop(monto: int) -> str:
-    """50000 -> '50.000 COP'."""
-    return f"{monto:,}".replace(",", ".") + " COP"
-
 
 def pedir_texto(etiqueta: str) -> str:
     return input(f"{etiqueta}: ").strip()
@@ -139,3 +135,7 @@ def main() -> None:
     finally:
         conn.close()
         print("Hasta luego.")
+
+
+if __name__ == "__main__":
+    main()

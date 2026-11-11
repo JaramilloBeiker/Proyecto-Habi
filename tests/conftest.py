@@ -37,3 +37,26 @@ def crear_usuario(conn):
         return usuario
 
     return _crear
+
+
+@pytest.fixture
+def cliente(ruta_db):
+    """Cliente de pruebas de Flask sobre una base de datos aislada."""
+    from habi.web import crear_app
+
+    app = crear_app(ruta_db, secret_key="clave-de-pruebas")
+    app.config["TESTING"] = True
+    return app.test_client()
+
+
+@pytest.fixture
+def registrar_y_entrar(cliente):
+    """Registra un usuario por la API e inicia sesión con él."""
+
+    def _hacer(nombre: str = "ana", password: str = "clave-segura"):
+        cliente.post("/api/registro", json={"nombre": nombre, "password": password})
+        respuesta = cliente.post("/api/login", json={"nombre": nombre, "password": password})
+        assert respuesta.status_code == 200
+        return respuesta
+
+    return _hacer

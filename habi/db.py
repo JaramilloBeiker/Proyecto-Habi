@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS movimientos (
 
 CREATE INDEX IF NOT EXISTS ix_movimientos_cuenta ON movimientos(cuenta_id, id DESC);
 
+-- RF-02 / RNF-SEC-01: sesiones abiertas. La cookie firmada solo guarda el token;
+-- al cerrar sesión se borra la fila y la cookie vieja deja de servir.
+CREATE TABLE IF NOT EXISTS sesiones (
+    token      TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+    expira_en  TEXT NOT NULL
+);
+
 -- RNF-D-04: los movimientos son inmutables.
 CREATE TRIGGER IF NOT EXISTS movimientos_sin_update
 BEFORE UPDATE ON movimientos

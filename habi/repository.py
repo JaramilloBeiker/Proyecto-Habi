@@ -53,6 +53,33 @@ def obtener_cuenta_fondeo_id(conn: sqlite3.Connection) -> int:
     return fila["id"]
 
 
+# ---------- Sesiones ----------
+
+def crear_sesion(conn: sqlite3.Connection, token: str, usuario_id: int, expira_en: str) -> None:
+    """INSERT en sesiones."""
+    conn.execute(
+        "INSERT INTO sesiones (token, usuario_id, expira_en) VALUES (?, ?, ?)",
+        (token, usuario_id, expira_en),
+    )
+
+
+def obtener_sesion(conn: sqlite3.Connection, token: str) -> sqlite3.Row | None:
+    """Sesión + datos del usuario y su cuenta. None si el token no existe."""
+    return conn.execute(
+        "SELECT s.expira_en, u.id AS usuario_id, u.nombre, c.id AS cuenta_id "
+        "FROM sesiones s "
+        "JOIN usuarios u ON u.id = s.usuario_id "
+        "JOIN cuentas c ON c.usuario_id = u.id "
+        "WHERE s.token = ?",
+        (token,),
+    ).fetchone()
+
+
+def eliminar_sesion(conn: sqlite3.Connection, token: str) -> None:
+    """DELETE de la sesión (cerrar sesión)."""
+    conn.execute("DELETE FROM sesiones WHERE token = ?", (token,))
+
+
 # ---------- Saldos ----------
 
 def obtener_saldo(conn: sqlite3.Connection, cuenta_id: int) -> int:
