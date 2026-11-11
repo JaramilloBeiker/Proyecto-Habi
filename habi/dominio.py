@@ -99,3 +99,31 @@ class Invitacion:
     bolsillo_nombre: str
     invitado_por: str
     fecha: str
+
+
+@dataclass(frozen=True)
+class VotoRetiro:
+    nombre: str
+    voto: str | None         # 'A_FAVOR' | 'EN_CONTRA' | None (aún no vota)
+
+
+@dataclass(frozen=True)
+class Retiro:
+    id: int
+    bolsillo_id: int
+    monto: int
+    destino: str             # usuario de Habi que recibe el dinero
+    proponente: str
+    motivo: str
+    estado: str              # 'PENDIENTE' | 'EJECUTADO' | 'RECHAZADO' | 'EXPIRADO'
+    creado_en: str
+    expira_en: str
+    cerrado_en: str | None
+    votos: tuple[VotoRetiro, ...] = ()
+
+    def voto_de(self, nombre: str) -> VotoRetiro | None:
+        """Voto de un miembro, o None si no estaba activo cuando se propuso."""
+        for voto in self.votos:
+            if voto.nombre == nombre:
+                return voto
+        return None

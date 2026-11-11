@@ -197,9 +197,10 @@ def crear_bolsillo(
 
 
 def obtener_bolsillo(conn: sqlite3.Connection, bolsillo_id: int) -> sqlite3.Row | None:
-    """Bolsillo + saldo de su cuenta + nombre de quien lo creó. None si no existe."""
+    """Bolsillo + saldo, monto reservado por retiros pendientes y creador. None si no existe."""
     return conn.execute(
-        "SELECT b.id, b.cuenta_id, b.nombre, b.meta, b.creado_en, c.saldo, u.nombre AS creador "
+        "SELECT b.id, b.cuenta_id, b.nombre, b.meta, b.creado_en, c.saldo, u.nombre AS creador, "
+        "COALESCE((SELECT SUM(r.monto) FROM retiros r WHERE r.bolsillo_id = b.id AND r.estado = 'PENDIENTE'), 0) AS reservado "
         "FROM bolsillos b "
         "JOIN cuentas c ON c.id = b.cuenta_id "
         "JOIN usuarios u ON u.id = b.creador_id "
@@ -285,7 +286,8 @@ def total_aportado(conn: sqlite3.Connection, cuenta_bolsillo_id: int, cuenta_usu
 def listar_bolsillos_activos(conn: sqlite3.Connection, usuario_id: int) -> list[sqlite3.Row]:
     """Bolsillos donde el usuario es miembro activo, del más nuevo al más viejo."""
     return conn.execute(
-        "SELECT b.id, b.nombre, b.meta, b.creado_en, c.saldo, u.nombre AS creador "
+        "SELECT b.id, b.nombre, b.meta, b.creado_en, c.saldo, u.nombre AS creador, "
+        "COALESCE((SELECT SUM(r.monto) FROM retiros r WHERE r.bolsillo_id = b.id AND r.estado = 'PENDIENTE'), 0) AS reservado "
         "FROM miembros_bolsillo m "
         "JOIN bolsillos b ON b.id = m.bolsillo_id "
         "JOIN cuentas c ON c.id = b.cuenta_id "
@@ -308,3 +310,140 @@ def listar_invitaciones(conn: sqlite3.Connection, usuario_id: int) -> list[sqlit
         "ORDER BY m.actualizado_en DESC",
         (usuario_id,),
     ).fetchall()
+
+
+# ---------- Juntia: retiros y votos ----------
+
+def expirar_retiros_vencidos(conn: sqlite3.Connection, ahora: str) -> int:
+    """Marca EXPIRADO todo retiro PENDIENTE cuya fecha límite ya pasó. Devuelve cuántos.
+
+    Las fechas se guardan en ISO 8601 UTC con el mismo formato, así que se
+    pueden comparar como texto.
+    """
+    cursor = conn.execute(
+        "UPDATE retiros SET estado = 'EXPIRADO', cerrado_en = ? WHERE estado = 'PENDIENTE' AND expira_en <= ?",
+        (ahora, ahora),
+    )
+    return cursor.rowcount
+
+
+def crear_retiro(
+    conn: sqlite3.Connection, bolsillo_id: int, proponente_id: int, destino_id: int, monto: int,
+    motivo: str, creado_en: str, expira_en: str,
+) -> int:
+    """INSERT de una propuesta de retiro en estado PENDIENTE. Devuelve el id."""
+    cursor = conn.execute(
+        "INSERT INTO retiros (bolsillo_id, proponente_id, destino_id, monto, motivo, estado, creado_en, expira_en) "
+        "VALUES (?, ?, ?, ?, ?, 'PENDIENTE', ?, ?)",
+        (bolsillo_id, proponente_id, destino_id, monto, motivo, creado_en, expira_en),
+    )
+    return cursor.lastrowid
+
+
+def usuarios_activos_de_bolsillo(conn: sqlite3.Connection, bolsillo_id: int) -> list[int]:
+    """Ids de los miembros ACTIVO del bolsillo en este momento."""
+    filas = conn.execute(
+        "SELECT usuario_id FROM miembros_bolsillo WHERE bolsillo_id = ? AND estado = 'ACTIVO' ORDER BY usuario_id",
+        (bolsillo_id,),
+    ).fetchall()
+    return [f["usuario_id"] for f in filas]
+
+
+def crear_voto(conn: sqlite3.Connection, retiro_id: int, usuario_id: int, voto: str | None, votado_en: str | None) -> None:
+    """INSERT de la fila de voto de un miembro (voto NULL = pendiente)."""
+    conn.execute(
+        "INSERT INTO votos_retiro (retiro_id, usuario_id, voto, votado_en) VALUES (?, ?, ?, ?)",
+        (retiro_id, usuario_id, voto, votado_en),
+    )
+
+
+def obtener_retiro(conn: sqlite3.Connection, retiro_id: int) -> sqlite3.Row | None:
+    """Retiro + nombres de proponente y destino + cuenta del destino. None si no existe."""
+    return conn.execute(
+        """
+        SELECT r.id, r.bolsillo_id, r.monto, r.motivo, r.estado, r.creado_en, r.expira_en, r.cerrado_en,
+               r.destino_id, d.nombre AS destino, cd.id AS destino_cuenta_id, p.nombre AS proponente
+        FROM retiros r
+        JOIN usuarios d ON d.id = r.destino_id
+        JOIN cuentas cd ON cd.usuario_id = d.id
+        JOIN usuarios p ON p.id = r.proponente_id
+        WHERE r.id = ?
+        """,
+        (retiro_id,),
+    ).fetchone()
+
+
+def listar_retiros(conn: sqlite3.Connection, bolsillo_id: int, limite: int) -> list[sqlite3.Row]:
+    """Retiros del bolsillo: primero los pendientes, luego los más recientes."""
+    return conn.execute(
+        """
+        SELECT r.id, r.bolsillo_id, r.monto, r.motivo, r.estado, r.creado_en, r.expira_en, r.cerrado_en,
+               d.nombre AS destino, p.nombre AS proponente
+        FROM retiros r
+        JOIN usuarios d ON d.id = r.destino_id
+        JOIN usuarios p ON p.id = r.proponente_id
+        WHERE r.bolsillo_id = ?
+        ORDER BY (r.estado = 'PENDIENTE') DESC, r.id DESC
+        LIMIT ?
+        """,
+        (bolsillo_id, limite),
+    ).fetchall()
+
+
+def listar_votos(conn: sqlite3.Connection, retiro_id: int) -> list[sqlite3.Row]:
+    """Votos del retiro (nombre, voto) de quienes estaban activos al proponerlo."""
+    return conn.execute(
+        "SELECT u.nombre, v.usuario_id, v.voto, v.votado_en "
+        "FROM votos_retiro v JOIN usuarios u ON u.id = v.usuario_id "
+        "WHERE v.retiro_id = ? ORDER BY u.nombre",
+        (retiro_id,),
+    ).fetchall()
+
+
+def obtener_voto(conn: sqlite3.Connection, retiro_id: int, usuario_id: int) -> sqlite3.Row | None:
+    """Fila de voto del usuario. None si no estaba activo cuando se propuso el retiro."""
+    return conn.execute(
+        "SELECT voto FROM votos_retiro WHERE retiro_id = ? AND usuario_id = ?",
+        (retiro_id, usuario_id),
+    ).fetchone()
+
+
+def registrar_voto(conn: sqlite3.Connection, retiro_id: int, usuario_id: int, voto: str, votado_en: str) -> bool:
+    """UPDATE del voto solo si aún no había votado. True si se registró."""
+    cursor = conn.execute(
+        "UPDATE votos_retiro SET voto = ?, votado_en = ? WHERE retiro_id = ? AND usuario_id = ? AND voto IS NULL",
+        (voto, votado_en, retiro_id, usuario_id),
+    )
+    return cursor.rowcount == 1
+
+
+def contar_votos(conn: sqlite3.Connection, retiro_id: int) -> sqlite3.Row:
+    """Totales del retiro: cuántos deben votar, cuántos a favor y cuántos en contra."""
+    return conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "COALESCE(SUM(voto = 'A_FAVOR'), 0) AS a_favor, "
+        "COALESCE(SUM(voto = 'EN_CONTRA'), 0) AS en_contra "
+        "FROM votos_retiro WHERE retiro_id = ?",
+        (retiro_id,),
+    ).fetchone()
+
+
+def cerrar_retiro(
+    conn: sqlite3.Connection, retiro_id: int, estado: str, cerrado_en: str, operacion_id: int | None = None
+) -> bool:
+    """Pasa un retiro PENDIENTE a EJECUTADO o RECHAZADO. True si estaba pendiente."""
+    cursor = conn.execute(
+        "UPDATE retiros SET estado = ?, cerrado_en = ?, operacion_id = ? WHERE id = ? AND estado = 'PENDIENTE'",
+        (estado, cerrado_en, operacion_id, retiro_id),
+    )
+    return cursor.rowcount == 1
+
+
+def tiene_voto_pendiente(conn: sqlite3.Connection, bolsillo_id: int, usuario_id: int) -> bool:
+    """True si el usuario debe votar algún retiro PENDIENTE del bolsillo."""
+    fila = conn.execute(
+        "SELECT 1 FROM votos_retiro v JOIN retiros r ON r.id = v.retiro_id "
+        "WHERE r.bolsillo_id = ? AND r.estado = 'PENDIENTE' AND v.usuario_id = ? AND v.voto IS NULL",
+        (bolsillo_id, usuario_id),
+    ).fetchone()
+    return fila is not None
