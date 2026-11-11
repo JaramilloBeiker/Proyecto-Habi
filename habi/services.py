@@ -12,10 +12,15 @@ from datetime import datetime, timedelta, timezone
 from habi import config, db, repository, security
 from habi.formato import formatear_cop
 from habi.dominio import (
+    Bolsillo,
     ErrorAutenticacion,
+    ErrorAutorizacion,
     ErrorValidacion,
+    Invitacion,
+    MiembroBolsillo,
     Movimiento,
     NoEncontrado,
+    OperacionNoPermitida,
     ResultadoOperacion,
     SaldoInsuficiente,
     Usuario,
@@ -254,3 +259,143 @@ def _resultado_repetido(
         clave_idempotencia=previa["clave_idempotencia"],
         repetida=True,
     )
+
+
+# ---------- Juntia: bolsillos, miembros e invitaciones ----------
+#
+# Un bolsillo es una cuenta compartida (tipo BOLSILLO). Quien lo crea queda como
+# miembro ACTIVO; a los demás se les invita y deben aceptar para ver el saldo.
+
+def _validar_datos_bolsillo(nombre: object, meta: object) -> tuple[str, int]:
+    if not isinstance(nombre, str) or not nombre.strip():
+        raise ErrorValidacion("nombre", "no puede estar vacío")
+    nombre = nombre.strip()
+    if len(nombre) > config.LONGITUD_MAXIMA_NOMBRE_BOLSILLO:
+        raise ErrorValidacion(
+            "nombre", f"no puede tener más de {config.LONGITUD_MAXIMA_NOMBRE_BOLSILLO} caracteres"
+        )
+    if isinstance(meta, bool) or not isinstance(meta, int):
+        raise ErrorValidacion("meta", "debe ser un número entero de pesos (sin decimales)")
+    if meta < config.MONTO_MINIMO:
+        raise ErrorValidacion("meta", f"debe ser mayor o igual a {formatear_cop(config.MONTO_MINIMO)}")
+    if meta > config.META_MAXIMA_BOLSILLO:
+        raise ErrorValidacion("meta", f"no puede superar {formatear_cop(config.META_MAXIMA_BOLSILLO)}")
+    return nombre, meta
+
+
+def _bolsillo_de_miembro_activo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> sqlite3.Row:
+    """Devuelve el bolsillo si el usuario es miembro activo; si no, el error adecuado.
+
+    A quien no fue invitado se le responde que no existe, para no revelar bolsillos ajenos.
+    """
+    _cuenta_propia(conn, usuario)  # exige sesión válida
+    bolsillo = repository.obtener_bolsillo(conn, bolsillo_id)
+    estado = repository.obtener_estado_miembro(conn, bolsillo_id, usuario.id) if bolsillo else None
+    if bolsillo is None or estado is None:
+        raise NoEncontrado("El bolsillo no existe.")
+    if estado == "INVITADO":
+        raise ErrorAutorizacion("Debes aceptar la invitación para ver este bolsillo.")
+    if estado != "ACTIVO":
+        raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")
+    return bolsillo
+
+
+def _a_bolsillo(fila: sqlite3.Row, reservado: int = 0) -> Bolsillo:
+    return Bolsillo(
+        id=fila["id"],
+        nombre=fila["nombre"],
+        meta=fila["meta"],
+        saldo=fila["saldo"],
+        reservado=reservado,
+        creador=fila["creador"],
+        creado_en=fila["creado_en"],
+    )
+
+
+def crear_bolsillo(conn: sqlite3.Connection, usuario: Usuario, nombre: str, meta: int) -> Bolsillo:
+    """Crea el bolsillo con su cuenta (saldo 0) y deja al creador como miembro ACTIVO."""
+    nombre, meta = _validar_datos_bolsillo(nombre, meta)
+    _cuenta_propia(conn, usuario)
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        cuenta_id = repository.crear_cuenta_bolsillo(conn, ahora)
+        bolsillo_id = repository.crear_bolsillo(conn, cuenta_id, nombre, meta, usuario.id, ahora)
+        repository.guardar_miembro(conn, bolsillo_id, usuario.id, "ACTIVO", None, ahora)
+    return ver_bolsillo(conn, usuario, bolsillo_id)
+
+
+def ver_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> Bolsillo:
+    """Detalle del bolsillo con su saldo. Solo para miembros activos."""
+    return _a_bolsillo(_bolsillo_de_miembro_activo(conn, usuario, bolsillo_id))
+
+
+def listar_bolsillos(conn: sqlite3.Connection, usuario: Usuario) -> list[Bolsillo]:
+    """Bolsillos donde el usuario es miembro activo."""
+    _cuenta_propia(conn, usuario)
+    return [_a_bolsillo(f) for f in repository.listar_bolsillos_activos(conn, usuario.id)]
+
+
+def listar_invitaciones(conn: sqlite3.Connection, usuario: Usuario) -> list[Invitacion]:
+    """Invitaciones pendientes del usuario (sin saldo: aún no las acepta)."""
+    _cuenta_propia(conn, usuario)
+    return [
+        Invitacion(
+            bolsillo_id=f["bolsillo_id"],
+            bolsillo_nombre=f["bolsillo_nombre"],
+            invitado_por=f["invitado_por"],
+            fecha=f["fecha"],
+        )
+        for f in repository.listar_invitaciones(conn, usuario.id)
+    ]
+
+
+def miembros_de_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> list[MiembroBolsillo]:
+    """Miembros activos e invitados pendientes. Solo para miembros activos."""
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    return [MiembroBolsillo(nombre=f["nombre"], estado=f["estado"]) for f in repository.listar_miembros(conn, bolsillo_id)]
+
+
+def invitar_a_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, nombre_invitado: str) -> None:
+    """Un miembro activo invita a otro usuario de Habi.
+
+    Se puede volver a invitar a quien rechazó o salió; no a quien ya es miembro
+    o tiene una invitación pendiente.
+    """
+    if not isinstance(nombre_invitado, str) or not nombre_invitado.strip():
+        raise ErrorValidacion("invitado", "es obligatorio")
+    nombre_invitado = nombre_invitado.strip()
+    _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    invitado = repository.obtener_usuario_por_nombre(conn, nombre_invitado)
+    if invitado is None:
+        raise NoEncontrado(f"El usuario '{nombre_invitado}' no existe.")
+
+    ahora = db.ahora_iso()
+    with db.transaccion(conn):
+        estado = repository.obtener_estado_miembro(conn, bolsillo_id, invitado["id"])
+        if estado == "ACTIVO":
+            raise ErrorValidacion("invitado", "ya es miembro del bolsillo")
+        if estado == "INVITADO":
+            raise ErrorValidacion("invitado", "ya tiene una invitación pendiente")
+        repository.guardar_miembro(conn, bolsillo_id, invitado["id"], "INVITADO", usuario.id, ahora)
+
+
+def _responder_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, estado_nuevo: str) -> None:
+    _cuenta_propia(conn, usuario)
+    if repository.obtener_bolsillo(conn, bolsillo_id) is None:
+        raise NoEncontrado("El bolsillo no existe.")
+    with db.transaccion(conn):
+        cambiado = repository.cambiar_estado_miembro(
+            conn, bolsillo_id, usuario.id, "INVITADO", estado_nuevo, db.ahora_iso()
+        )
+        if not cambiado:
+            raise OperacionNoPermitida("No tienes una invitación pendiente para este bolsillo.")
+
+
+def aceptar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> Bolsillo:
+    """El invitado pasa a miembro ACTIVO y desde ahí puede ver el saldo."""
+    _responder_invitacion(conn, usuario, bolsillo_id, "ACTIVO")
+    return ver_bolsillo(conn, usuario, bolsillo_id)
+
+
+def rechazar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> None:
+    _responder_invitacion(conn, usuario, bolsillo_id, "RECHAZADO")

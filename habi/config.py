@@ -20,6 +20,10 @@ LONGITUD_MINIMA_PASSWORD = 8
 # Historial (RF-06)
 TAMANO_PAGINA_HISTORIAL = 20
 
+# Juntia (bolsillos compartidos)
+LONGITUD_MAXIMA_NOMBRE_BOLSILLO = 60
+META_MAXIMA_BOLSILLO = 1_000_000_000
+
 # Contraseñas (RNF-SEC-01). En pruebas se baja para que la suite sea rápida.
 PBKDF2_ALGORITMO = "sha256"
 PBKDF2_ITERACIONES = int(os.environ.get("HABI_PBKDF2_ITERACIONES", 600_000))

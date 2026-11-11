@@ -34,6 +34,10 @@ class SaldoInsuficiente(HabiError):
     """La cuenta origen no tiene saldo para la operación (RF-04)."""
 
 
+class OperacionNoPermitida(HabiError):
+    """La acción no se puede hacer en el estado actual (ej.: votar un retiro ya cerrado)."""
+
+
 # ---------- Modelos ----------
 
 @dataclass(frozen=True)
@@ -61,3 +65,35 @@ class ResultadoOperacion:
     creada_en: str
     clave_idempotencia: str | None = None
     repetida: bool = False   # True si se devolvió el resultado de una clave ya usada (RNF-R-03)
+
+
+# ---------- Juntia (bolsillos compartidos) ----------
+
+@dataclass(frozen=True)
+class Bolsillo:
+    id: int
+    nombre: str
+    meta: int                # monto objetivo en COP
+    saldo: int               # dinero en la cuenta del bolsillo
+    reservado: int           # suma de los retiros pendientes
+    creador: str
+    creado_en: str
+
+    @property
+    def disponible(self) -> int:
+        """Lo que se puede aportar a un nuevo retiro: saldo menos lo reservado."""
+        return self.saldo - self.reservado
+
+
+@dataclass(frozen=True)
+class MiembroBolsillo:
+    nombre: str
+    estado: str              # 'INVITADO' | 'ACTIVO' | 'RECHAZADO' | 'SALIO'
+
+
+@dataclass(frozen=True)
+class Invitacion:
+    bolsillo_id: int
+    bolsillo_nombre: str
+    invitado_por: str
+    fecha: str
