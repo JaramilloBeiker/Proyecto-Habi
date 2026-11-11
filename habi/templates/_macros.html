@@ -1,0 +1,46 @@
+{# Campo de formulario con su etiqueta y, si lo hay, el error de ese campo (RNF-U-03). #}
+{% macro campo(nombre, etiqueta, tipo="text", valor="", errores={}, ayuda="", ident="") %}
+    {% set ident = ident or nombre %}
+    <div class="campo {% if errores.get(nombre) %}campo--error{% endif %}">
+        <label for="{{ ident }}">{{ etiqueta }}</label>
+        <input id="{{ ident }}" name="{{ nombre }}" type="{{ tipo }}" value="{{ valor }}" {{ kwargs | xmlattr }}>
+        {% if errores.get(nombre) %}
+            <p class="campo__error">{{ errores[nombre][:1] | upper }}{{ errores[nombre][1:] }}.</p>
+        {% elif ayuda %}
+            <p class="campo__ayuda">{{ ayuda }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+
+{# Tabla de movimientos (RF-06). Montos en COP y fechas ISO 8601 (RNF-U-02). #}
+{% macro tabla_movimientos(movimientos) %}
+    <div class="tabla-contenedor">
+        <table class="tabla">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Contraparte</th>
+                    <th class="tabla__monto">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in movimientos %}
+                    <tr>
+                        <td class="tabla__fecha"><time datetime="{{ m.creado_en }}">{{ m.creado_en }}</time></td>
+                        <td class="tabla__concepto">
+                            {% if m.tipo_operacion == "CARGA" %}Carga de saldo
+                            {% elif m.monto < 0 %}Transferencia enviada
+                            {% else %}Transferencia recibida{% endif %}
+                        </td>
+                        <td class="tabla__contraparte">{{ "Cuenta de fondeo" if m.contraparte == "FONDEO" else m.contraparte }}</td>
+                        <td class="tabla__monto {{ 'monto--positivo' if m.monto > 0 else 'monto--negativo' }}">
+                            {{ "+" if m.monto > 0 else "" }}{{ m.monto | cop }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endmacro %}

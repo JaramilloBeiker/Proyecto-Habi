@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo %}
+
+{% block titulo %}Crear cuenta{% endblock %}
+
+{% block contenido %}
+<section class="acceso">
+    <div class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h1>Crear cuenta</h1>
+            <p class="texto-suave">Tu cuenta empieza con saldo de 0 COP.</p>
+        </div>
+
+        <form method="post" action="{{ url_for('paginas.registro') }}">
+            {{ campo("nombre", "Usuario", valor=nombre, errores=errores,
+                     required=true, autocomplete="username", autofocus=true) }}
+            {{ campo("password", "Contraseña", tipo="password", errores=errores,
+                     ayuda="Mínimo 8 caracteres.",
+                     required=true, minlength=8, autocomplete="new-password") }}
+            <button class="boton boton--bloque" type="submit">Crear cuenta</button>
+        </form>
+    </div>
+    <p class="acceso__pie">¿Ya tienes cuenta? <a href="{{ url_for('paginas.entrar') }}">Inicia sesión</a></p>
+</section>
+{% endblock %}

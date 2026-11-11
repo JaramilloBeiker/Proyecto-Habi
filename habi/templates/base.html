@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block titulo %}{% endblock %} · Habi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+    <header class="encabezado">
+        <div class="contenedor encabezado__fila">
+            <a class="marca" href="{{ url_for('paginas.inicio') }}">Habi</a>
+            {% if usuario %}
+                <nav class="navegacion">
+                    <a href="{{ url_for('paginas.cuenta') }}">Mi cuenta</a>
+                    <a href="{{ url_for('paginas.historial') }}">Historial</a>
+                    <span class="navegacion__usuario">{{ usuario.nombre }}</span>
+                    <form method="post" action="{{ url_for('paginas.salir') }}">
+                        <button class="boton boton--secundario boton--pequeno" type="submit">Cerrar sesión</button>
+                    </form>
+                </nav>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="contenedor">
+        {# RNF-U-01: resultado de la última operación #}
+        {% for categoria, mensaje in get_flashed_messages(with_categories=true) %}
+            <div class="aviso aviso--{{ categoria }}" role="status">{{ mensaje }}</div>
+        {% endfor %}
+
+        {% block contenido %}{% endblock %}
+    </main>
+</body>
+</html>
