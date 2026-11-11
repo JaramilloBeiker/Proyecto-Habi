@@ -10,10 +10,12 @@ Patrón de cada formulario:
       (RNF-U-01, RNF-U-03).
 """
 
+import uuid
+
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 from habi import services
-from habi.dominio import ErrorAutenticacion, ErrorValidacion, HabiError
+from habi.dominio import ErrorAutenticacion, ErrorValidacion, HabiError, NoEncontrado
 from habi.formato import formatear_cop
 from habi.web import abrir_sesion, leer_entero, obtener_conexion
 
@@ -104,7 +106,7 @@ def salir():
     return ir_a_entrar()
 
 
-# ---------- Cuenta (RF-03, RF-05) ----------
+# ---------- Cuenta (RF-03, RF-04, RF-05) ----------
 
 def mostrar_cuenta(usuario, formulario=None, errores=None, valores=None, codigo=200):
     """Panel de la cuenta.
@@ -112,14 +114,19 @@ def mostrar_cuenta(usuario, formulario=None, errores=None, valores=None, codigo=
     `formulario` indica cuál formulario falló ('carga' o 'transferencia'),
     para marcar sus campos y conservar lo que el usuario escribió.
     """
+    valores = valores or {}
     saldo = services.consultar_saldo(obtener_conexion(), usuario)
+    # RNF-R-03: cada formulario de transferencia lleva una clave única generada aquí.
+    # Si el formulario falló se conserva su clave: esa transferencia no llegó a hacerse.
+    clave = valores.get("clave_idempotencia") or str(uuid.uuid4())
     return render_template(
         "cuenta.html",
         usuario=usuario,
         saldo=saldo,
+        clave=clave,
         formulario=formulario,
         errores=errores or {},
-        valores=valores or {},
+        valores=valores,
     ), codigo
 
 
@@ -145,4 +152,46 @@ def cargar():
         return mostrar_cuenta(usuario, "carga", errores_de(error), {"monto": texto_monto}, 400)
 
     flash(f"Carga de {formatear_cop(resultado.monto)} registrada.", "exito")
+    return redirect(url_for("paginas.cuenta"))
+
+
+@paginas.post("/cuenta/transferir")
+def transferir():
+    usuario = usuario_o_none()
+    if usuario is None:
+        return ir_a_entrar()
+
+    valores = {
+        "destino": request.form.get("destino", ""),
+        "monto": request.form.get("monto", ""),
+        "clave_idempotencia": request.form.get("clave_idempotencia", ""),
+    }
+    try:
+        try:
+            uuid.UUID(valores["clave_idempotencia"])
+        except ValueError:
+            raise ErrorValidacion("clave_idempotencia", "no es válida")
+        monto = leer_entero(valores["monto"], "monto")
+        resultado = services.transferir(
+            obtener_conexion(), usuario, valores["destino"], monto, valores["clave_idempotencia"]
+        )
+    except ErrorValidacion as error:
+        if error.campo == "clave_idempotencia":
+            # El formulario es viejo o ya se usó para otra cosa: se entrega uno con clave nueva.
+            flash("Este formulario ya no es válido. Revisa los datos y envíalo de nuevo.", "error")
+            valores["clave_idempotencia"] = ""
+            return mostrar_cuenta(usuario, "transferencia", {}, valores, 400)
+        return mostrar_cuenta(usuario, "transferencia", errores_de(error), valores, 400)
+    except NoEncontrado:
+        flash("Revisa los datos marcados.", "error")
+        errores = {"destino": "no existe un usuario con ese nombre"}
+        return mostrar_cuenta(usuario, "transferencia", errores, valores, 404)
+    except HabiError as error:
+        return mostrar_cuenta(usuario, "transferencia", errores_de(error), valores, 409)
+
+    if resultado.repetida:
+        flash("Esta transferencia ya se había realizado; no se repitió.", "exito")
+    else:
+        destino = valores["destino"].strip()
+        flash(f"Transferencia de {formatear_cop(resultado.monto)} a {destino} realizada.", "exito")
     return redirect(url_for("paginas.cuenta"))

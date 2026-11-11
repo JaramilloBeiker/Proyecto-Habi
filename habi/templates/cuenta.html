@@ -12,6 +12,8 @@
 {# Solo se marcan los errores del formulario que se envió. #}
 {% set errores_carga = errores if formulario == "carga" else {} %}
 {% set valores_carga = valores if formulario == "carga" else {} %}
+{% set errores_transferencia = errores if formulario == "transferencia" else {} %}
+{% set valores_transferencia = valores if formulario == "transferencia" else {} %}
 
 <div class="rejilla">
     <section class="tarjeta">
@@ -25,6 +27,25 @@
                      ayuda="Entre 1 y 5.000.000 COP, sin decimales.",
                      required=true, min=1, max=5000000, step=1, inputmode="numeric") }}
             <button class="boton" type="submit">Cargar</button>
+        </form>
+    </section>
+
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Transferir</h2>
+            <p class="texto-suave">Envía dinero a otro usuario de Habi.</p>
+        </div>
+        <form method="post" action="{{ url_for('paginas.transferir') }}">
+            {# RNF-R-03: clave única de este formulario; reenviarlo no repite la transferencia. #}
+            <input type="hidden" name="clave_idempotencia" value="{{ clave }}">
+            {{ campo("destino", "Usuario destino",
+                     valor=valores_transferencia.get("destino", ""), errores=errores_transferencia,
+                     required=true, autocomplete="off") }}
+            {{ campo("monto", "Monto (COP)", tipo="number", ident="monto-transferencia",
+                     valor=valores_transferencia.get("monto", ""), errores=errores_transferencia,
+                     ayuda="Entre 1 y 5.000.000 COP, sin decimales.",
+                     required=true, min=1, max=5000000, step=1, inputmode="numeric") }}
+            <button class="boton" type="submit">Transferir</button>
         </form>
     </section>
 </div>
