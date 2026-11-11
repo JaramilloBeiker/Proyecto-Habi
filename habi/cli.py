@@ -135,3 +135,7 @@ def main() -> None:
     finally:
         conn.close()
         print("Hasta luego.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,11 +1,15 @@
 # Habi — Sistema de transferencias entre personas
 
-Aplicación de consola para crear cuentas, cargar saldo simulado, transferir dinero entre cuentas,
-consultar saldo y ver el historial de movimientos. Reto Técnico HabiCapital 2027.
+Aplicación web local (Flask) para crear cuentas, cargar saldo simulado, transferir dinero entre
+cuentas, consultar saldo y ver el historial de movimientos. Reto Técnico HabiCapital 2027.
+
+> **Advertencia:** la aplicación usa el servidor de desarrollo de Flask. Está pensado **solo para
+> uso local** (escucha en `127.0.0.1`) y no debe publicarse en internet ni usarse en producción.
 
 ## Tecnologías
 
-Python 3.12+ · consola (`input`/`print`) · SQLite (`sqlite3`) · `hashlib.pbkdf2_hmac` · `uuid` · pytest
+Python 3.12+ · Flask (rutas y cookie de sesión firmada) · SQLite (`sqlite3`) ·
+`hashlib.pbkdf2_hmac` · `uuid` · pytest y cliente de pruebas de Flask
 
 ## Cómo ejecutar
 
@@ -14,27 +18,62 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
 
-python -m habi                  # aplicación de consola
+python -m habi                  # servidor local en http://127.0.0.1:5000
 python -m pytest                # suite completa (RNF-S-02)
+python -m habi.cli              # versión de consola (opcional)
 ```
 
-La base de datos se guarda en `data/habi.db` (configurable con la variable `HABI_DB_PATH`).
+Variables de entorno opcionales:
+
+| Variable | Uso | Por defecto |
+|---|---|---|
+| `HABI_DB_PATH` | Ruta del archivo SQLite | `data/habi.db` |
+| `HABI_SECRET_KEY` | Clave para firmar la cookie de sesión | Una aleatoria en cada arranque (las sesiones abiertas se pierden al reiniciar; los datos no) |
+
+## API
+
+Todas las respuestas son JSON. Éxito: `{"ok": true, "mensaje": ..., ...}`.
+Error: `{"ok": false, "error": "motivo", "campo": "monto" | null}`.
+Los cuerpos se aceptan como JSON o como formulario HTML.
+
+| Método | Ruta | Cuerpo / parámetros | Requiere sesión | Requerimiento |
+|---|---|---|---|---|
+| POST | `/api/registro` | `nombre`, `password` | No | RF-01 |
+| POST | `/api/login` | `nombre`, `password` | No | RF-02 |
+| POST | `/api/logout` | — | No | RF-02 |
+| GET | `/api/sesion` | — | Sí | RF-02 |
+| GET | `/api/saldo` | — | Sí | RF-05 |
+| POST | `/api/cargas` | `monto` | Sí | RF-03 |
+| GET | `/api/transferencias/nueva` | — (devuelve `clave_idempotencia`) | Sí | RNF-R-03 |
+| POST | `/api/transferencias` | `destino`, `monto`, `clave_idempotencia` | Sí | RF-04 |
+| GET | `/api/historial` | `?pagina=0` (bloques de 20) | Sí | RF-06 |
+
+Códigos HTTP: `400` dato inválido, `401` sin sesión o sesión expirada, `404` destino inexistente,
+`409` saldo insuficiente.
 
 ## Estructura
 
 ```
 habi/
-  config.py      Constantes y límites (montos, página del historial, PBKDF2, ruta de BD)
+  config.py      Constantes y límites (montos, página del historial, PBKDF2, sesión, ruta de BD)
   db.py          Conexión, esquema SQLite y transacciones (BEGIN IMMEDIATE)
   dominio.py     Modelos y errores de negocio
   security.py    Hash y verificación de contraseñas
   repository.py  Acceso a datos (solo SQL)
-  services.py    Lógica de negocio: cargas, transferencias, saldo, historial
-  cli.py         Menú de consola
-tests/           Una o más pruebas por requerimiento
+  services.py    Lógica de negocio: sesiones, cargas, transferencias, saldo, historial
+  formato.py     Formato de montos en COP
+  web.py         Rutas Flask (API JSON)
+  cli.py         Menú de consola (opcional)
+tests/           Una o más pruebas por requerimiento (servicios y rutas)
 ```
 
-Separación de capas (RNF-S-01): `cli` → `services` → `repository` → SQLite.
+Separación de capas (RNF-S-01): `web` / `cli` → `services` → `repository` → SQLite.
+
+## Sesiones
+
+La cookie de sesión de Flask va firmada con `SECRET_KEY`, expira a los 60 minutos y solo guarda un
+token aleatorio. El token se registra en la tabla `sesiones` con su fecha de expiración. Al cerrar
+sesión se borra la fila, así que una copia de la cookie anterior deja de dar acceso.
 
 ---
 
