@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import campo %}
+{% from "_macros.html" import campo, tabla_movimientos %}
 
 {% block titulo %}Mi cuenta{% endblock %}
 
@@ -49,4 +49,16 @@
         </form>
     </section>
 </div>
+
+<section class="tarjeta recientes">
+    <div class="tarjeta__encabezado tarjeta__encabezado--fila">
+        <h2>Últimos movimientos</h2>
+        <a href="{{ url_for('paginas.historial') }}">Ver historial completo</a>
+    </div>
+    {% if recientes %}
+        {{ tabla_movimientos(recientes) }}
+    {% else %}
+        <p class="vacio">Aún no tienes movimientos.</p>
+    {% endif %}
+</section>
 {% endblock %}

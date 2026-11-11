@@ -306,3 +306,94 @@ main.contenedor {
         grid-template-columns: 1fr;
     }
 }
+
+/* ---------- Movimientos ---------- */
+
+.recientes {
+    margin-top: 24px;
+}
+
+.tarjeta__encabezado--fila {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+}
+
+.tabla-contenedor {
+    overflow-x: auto;
+}
+
+.tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tabla th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--texto-suave);
+    padding: 0 12px 10px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.tabla td {
+    padding: 12px;
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+}
+
+.tabla tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.tabla th:first-child,
+.tabla td:first-child {
+    padding-left: 0;
+}
+
+.tabla th:last-child,
+.tabla td:last-child {
+    padding-right: 0;
+}
+
+.tabla__fecha {
+    color: var(--texto-suave);
+    font-variant-numeric: tabular-nums;
+}
+
+.tabla__monto {
+    text-align: right !important;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.monto--positivo {
+    color: var(--positivo);
+}
+
+.monto--negativo {
+    color: var(--negativo);
+}
+
+.vacio {
+    margin: 0;
+    padding: 24px 0;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+.paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--borde);
+    font-size: 14px;
+}

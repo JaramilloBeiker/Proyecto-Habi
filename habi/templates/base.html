@@ -13,6 +13,7 @@
             {% if usuario %}
                 <nav class="navegacion">
                     <a href="{{ url_for('paginas.cuenta') }}">Mi cuenta</a>
+                    <a href="{{ url_for('paginas.historial') }}">Historial</a>
                     <span class="navegacion__usuario">{{ usuario.nombre }}</span>
                     <form method="post" action="{{ url_for('paginas.salir') }}">
                         <button class="boton boton--secundario boton--pequeno" type="submit">Cerrar sesión</button>

@@ -14,7 +14,7 @@ import uuid
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
-from habi import services
+from habi import config, services
 from habi.dominio import ErrorAutenticacion, ErrorValidacion, HabiError, NoEncontrado
 from habi.formato import formatear_cop
 from habi.web import abrir_sesion, leer_entero, obtener_conexion
@@ -115,7 +115,9 @@ def mostrar_cuenta(usuario, formulario=None, errores=None, valores=None, codigo=
     para marcar sus campos y conservar lo que el usuario escribió.
     """
     valores = valores or {}
-    saldo = services.consultar_saldo(obtener_conexion(), usuario)
+    conn = obtener_conexion()
+    saldo = services.consultar_saldo(conn, usuario)
+    recientes = services.consultar_historial(conn, usuario, 0)[:5]
     # RNF-R-03: cada formulario de transferencia lleva una clave única generada aquí.
     # Si el formulario falló se conserva su clave: esa transferencia no llegó a hacerse.
     clave = valores.get("clave_idempotencia") or str(uuid.uuid4())
@@ -123,6 +125,7 @@ def mostrar_cuenta(usuario, formulario=None, errores=None, valores=None, codigo=
         "cuenta.html",
         usuario=usuario,
         saldo=saldo,
+        recientes=recientes,
         clave=clave,
         formulario=formulario,
         errores=errores or {},
@@ -195,3 +198,27 @@ def transferir():
         destino = valores["destino"].strip()
         flash(f"Transferencia de {formatear_cop(resultado.monto)} a {destino} realizada.", "exito")
     return redirect(url_for("paginas.cuenta"))
+
+
+# ---------- Historial (RF-06) ----------
+
+@paginas.get("/historial")
+def historial():
+    usuario = usuario_o_none()
+    if usuario is None:
+        return ir_a_entrar()
+
+    try:
+        pagina = leer_entero(request.args.get("pagina", "0"), "pagina")
+        movimientos = services.consultar_historial(obtener_conexion(), usuario, pagina)
+    except ErrorValidacion:
+        flash("La página pedida no es válida.", "error")
+        return redirect(url_for("paginas.historial"))
+
+    return render_template(
+        "historial.html",
+        usuario=usuario,
+        movimientos=movimientos,
+        pagina=pagina,
+        hay_mas=len(movimientos) == config.TAMANO_PAGINA_HISTORIAL,
+    )

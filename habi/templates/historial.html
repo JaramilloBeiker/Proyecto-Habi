@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tabla_movimientos %}
+
+{% block titulo %}Historial{% endblock %}
+
+{% block contenido %}
+<section class="tarjeta">
+    <div class="tarjeta__encabezado">
+        <h1>Historial de movimientos</h1>
+        <p class="texto-suave">Del más reciente al más antiguo, en bloques de 20.</p>
+    </div>
+
+    {% if movimientos %}
+        {{ tabla_movimientos(movimientos) }}
+    {% elif pagina == 0 %}
+        <p class="vacio">Aún no tienes movimientos.</p>
+    {% else %}
+        <p class="vacio">No hay más movimientos.</p>
+    {% endif %}
+
+    {% if pagina > 0 or hay_mas %}
+        <nav class="paginacion">
+            {% if pagina > 0 %}
+                <a class="boton boton--secundario boton--pequeno"
+                   href="{{ url_for('paginas.historial', pagina=pagina - 1) }}">Más recientes</a>
+            {% else %}
+                <span></span>
+            {% endif %}
+            <span class="texto-suave">Página {{ pagina + 1 }}</span>
+            {% if hay_mas %}
+                <a class="boton boton--secundario boton--pequeno"
+                   href="{{ url_for('paginas.historial', pagina=pagina + 1) }}">Más antiguos</a>
+            {% else %}
+                <span></span>
+            {% endif %}
+        </nav>
+    {% endif %}
+</section>
+{% endblock %}

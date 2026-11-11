@@ -11,3 +11,36 @@
         {% endif %}
     </div>
 {% endmacro %}
+
+
+{# Tabla de movimientos (RF-06). Montos en COP y fechas ISO 8601 (RNF-U-02). #}
+{% macro tabla_movimientos(movimientos) %}
+    <div class="tabla-contenedor">
+        <table class="tabla">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Contraparte</th>
+                    <th class="tabla__monto">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in movimientos %}
+                    <tr>
+                        <td class="tabla__fecha"><time datetime="{{ m.creado_en }}">{{ m.creado_en }}</time></td>
+                        <td>
+                            {% if m.tipo_operacion == "CARGA" %}Carga de saldo
+                            {% elif m.monto < 0 %}Transferencia enviada
+                            {% else %}Transferencia recibida{% endif %}
+                        </td>
+                        <td>{{ "Cuenta de fondeo" if m.contraparte == "FONDEO" else m.contraparte }}</td>
+                        <td class="tabla__monto {{ 'monto--positivo' if m.monto > 0 else 'monto--negativo' }}">
+                            {{ "+" if m.monto > 0 else "" }}{{ m.monto | cop }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endmacro %}
