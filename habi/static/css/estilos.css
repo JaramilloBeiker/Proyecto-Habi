@@ -397,3 +397,16 @@ main.contenedor {
     border-top: 1px solid var(--borde);
     font-size: 14px;
 }
+
+/* Vista previa del monto que agrega app.js */
+.campo__vista {
+    margin: 6px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primario);
+}
+
+.campo__vista:empty {
+    display: none;
+}
+

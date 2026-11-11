@@ -86,3 +86,11 @@ def test_cookie_vieja_no_sirve_despues_de_salir(cliente):
     cliente.post("/salir")
     cliente.set_cookie("session", cookie_vieja)
     assert cliente.get("/cuenta").status_code == 302
+
+
+def test_paginas_cargan_el_javascript(cliente):
+    """JavaScript sin frameworks para mejoras puntuales."""
+    assert "js/app.js" in cliente.get("/entrar").get_data(as_text=True)
+    r = cliente.get("/static/js/app.js")
+    assert r.status_code == 200
+    assert "formatearCop" in r.get_data(as_text=True)
