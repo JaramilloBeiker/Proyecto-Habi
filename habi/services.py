@@ -5,7 +5,9 @@ conexión ya abierta; cada hilo/proceso usa la suya.
 Las funciones de cuenta reciben el `usuario` autenticado (RNF-SEC-01/02).
 """
 
+import secrets
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 from habi import config, db, repository, security
 from habi.dominio import (
@@ -97,6 +99,37 @@ def iniciar_sesion(conn: sqlite3.Connection, nombre: str, password: str) -> Usua
     if fila is None or not security.verificar_password(password or "", fila["password_hash"]):
         raise ErrorAutenticacion(MENSAJE_CREDENCIALES_INVALIDAS)
     return Usuario(id=fila["id"], nombre=fila["nombre"], cuenta_id=fila["cuenta_id"])
+
+
+# ---------- Sesiones (RF-02, RNF-SEC-01) ----------
+
+def crear_sesion(conn: sqlite3.Connection, usuario: Usuario) -> str:
+    """Abre una sesión para el usuario y devuelve su token (va dentro de la cookie firmada)."""
+    token = secrets.token_urlsafe(32)
+    expira = datetime.now(timezone.utc) + timedelta(minutes=config.DURACION_SESION_MINUTOS)
+    with db.transaccion(conn):
+        repository.crear_sesion(conn, token, usuario.id, expira.isoformat(timespec="seconds"))
+    return token
+
+
+def usuario_de_sesion(conn: sqlite3.Connection, token: str | None) -> Usuario:
+    """Devuelve el usuario dueño del token. Si no existe o expiró -> ErrorAutenticacion."""
+    if not token:
+        raise ErrorAutenticacion("Debes iniciar sesión.")
+    fila = repository.obtener_sesion(conn, token)
+    if fila is None:
+        raise ErrorAutenticacion("Debes iniciar sesión.")
+    if datetime.fromisoformat(fila["expira_en"]) <= datetime.now(timezone.utc):
+        cerrar_sesion(conn, token)
+        raise ErrorAutenticacion("Tu sesión expiró. Inicia sesión de nuevo.")
+    return Usuario(id=fila["usuario_id"], nombre=fila["nombre"], cuenta_id=fila["cuenta_id"])
+
+
+def cerrar_sesion(conn: sqlite3.Connection, token: str | None) -> None:
+    """Borra la sesión: la cookie anterior deja de dar acceso."""
+    if token:
+        with db.transaccion(conn):
+            repository.eliminar_sesion(conn, token)
 
 
 # ---------- Saldo e historial (RF-05, RF-06) ----------
