@@ -22,6 +22,7 @@ from habi.dominio import (
     NoEncontrado,
     SaldoInsuficiente,
 )
+from habi.formato import formatear_cop
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -76,6 +77,34 @@ def leer_texto(datos: dict, campo: str) -> str:
     """Devuelve el campo como texto; si no viene o no es texto, ''."""
     valor = datos.get(campo, "")
     return valor if isinstance(valor, str) else ""
+
+
+def leer_entero(valor, campo: str):
+    """Convierte texto de un formulario ('50000') a int.
+
+    Si el texto no es un entero sin signo ni separadores -> ErrorValidacion(campo).
+    Si ya viene como número (JSON), se deja igual: el rango y los decimales
+    los valida services.validar_monto.
+    """
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if not (texto.isascii() and texto.isdigit()):
+            raise ErrorValidacion(campo, "debe ser un número entero positivo, sin decimales ni separadores")
+        return int(texto)
+    return valor
+
+
+def movimiento_a_dict(m) -> dict:
+    """Movimiento listo para mostrar: monto con signo y en COP, fecha ISO 8601."""
+    return {
+        "id": m.id,
+        "operacion_id": m.operacion_id,
+        "tipo": m.tipo_operacion,
+        "monto": m.monto,
+        "monto_cop": ("+" if m.monto > 0 else "") + formatear_cop(m.monto),
+        "contraparte": m.contraparte,
+        "fecha": m.creado_en,
+    }
 
 
 def usuario_actual():
@@ -142,3 +171,43 @@ def logout():
 def sesion_actual():
     usuario = usuario_actual()
     return respuesta_ok("Sesión activa.", usuario={"nombre": usuario.nombre})
+
+
+# ---------- Saldo, carga e historial (RF-03, RF-05, RF-06) ----------
+
+@api.get("/saldo")
+def saldo():
+    saldo_actual = services.consultar_saldo(obtener_conexion(), usuario_actual())
+    return respuesta_ok("Saldo consultado.", saldo=saldo_actual, saldo_cop=formatear_cop(saldo_actual))
+
+
+@api.post("/cargas")
+def cargar():
+    usuario = usuario_actual()
+    monto = leer_entero(leer_datos().get("monto"), "monto")
+    conn = obtener_conexion()
+    resultado = services.cargar_saldo(conn, usuario, monto)
+    saldo_actual = services.consultar_saldo(conn, usuario)
+    return respuesta_ok(
+        f"Carga de {formatear_cop(resultado.monto)} registrada.",
+        201,
+        operacion_id=resultado.operacion_id,
+        monto=resultado.monto,
+        fecha=resultado.creada_en,
+        saldo=saldo_actual,
+        saldo_cop=formatear_cop(saldo_actual),
+    )
+
+
+@api.get("/historial")
+def historial():
+    usuario = usuario_actual()
+    pagina = leer_entero(request.args.get("pagina", "0"), "pagina")
+    movimientos = services.consultar_historial(obtener_conexion(), usuario, pagina)
+    return respuesta_ok(
+        "Historial consultado.",
+        pagina=pagina,
+        tamano_pagina=config.TAMANO_PAGINA_HISTORIAL,
+        hay_mas=len(movimientos) == config.TAMANO_PAGINA_HISTORIAL,
+        movimientos=[movimiento_a_dict(m) for m in movimientos],
+    )
