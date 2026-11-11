@@ -53,8 +53,9 @@ class Movimiento:
     operacion_id: int
     tipo_operacion: str      # 'CARGA' | 'TRANSFERENCIA'
     monto: int               # con signo: + entra, - sale
-    contraparte: str         # nombre del otro usuario o 'FONDEO'
+    contraparte: str         # nombre del otro usuario, del bolsillo o 'FONDEO'
     creado_en: str           # ISO 8601
+    contraparte_tipo: str = "USUARIO"   # 'USUARIO' | 'FONDEO' | 'BOLSILLO'
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class Bolsillo:
 class MiembroBolsillo:
     nombre: str
     estado: str              # 'INVITADO' | 'ACTIVO' | 'RECHAZADO' | 'SALIO'
+    aportado: int = 0        # total que ha aportado al bolsillo
 
 
 @dataclass(frozen=True)

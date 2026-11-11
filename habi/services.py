@@ -147,9 +147,17 @@ def consultar_saldo(conn: sqlite3.Connection, usuario: Usuario) -> int:
 
 def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int = 0) -> list[Movimiento]:
     """RF-06. Bloque `pagina` (desde 0) de config.TAMANO_PAGINA_HISTORIAL movimientos, más reciente primero."""
+    _validar_pagina(pagina)
+    return _movimientos_de_cuenta(conn, _cuenta_propia(conn, usuario), pagina)
+
+
+def _validar_pagina(pagina: object) -> None:
     if isinstance(pagina, bool) or not isinstance(pagina, int) or pagina < 0:
         raise ErrorValidacion("pagina", "debe ser un entero mayor o igual a 0")
-    cuenta_id = _cuenta_propia(conn, usuario)
+
+
+def _movimientos_de_cuenta(conn: sqlite3.Connection, cuenta_id: int, pagina: int) -> list[Movimiento]:
+    """Bloque `pagina` de movimientos de una cuenta (personal o de bolsillo)."""
     tamano = config.TAMANO_PAGINA_HISTORIAL
     filas = repository.listar_movimientos(conn, cuenta_id, tamano, pagina * tamano)
     return [
@@ -160,6 +168,7 @@ def consultar_historial(conn: sqlite3.Connection, usuario: Usuario, pagina: int 
             monto=f["monto"],
             contraparte=f["contraparte"],
             creado_en=f["creado_en"],
+            contraparte_tipo=f["contraparte_tipo"],
         )
         for f in filas
     ]
@@ -213,20 +222,35 @@ def transferir(
     if destino["cuenta_id"] == origen_id:
         raise ErrorValidacion("destino", "no puedes transferirte a ti mismo")
 
-    ahora = db.ahora_iso()
     with db.transaccion(conn):
-        previa = repository.obtener_operacion_por_clave(conn, clave_idempotencia)
-        if previa is not None:
-            return _resultado_repetido(conn, previa, origen_id, destino["cuenta_id"], monto)
-        if not repository.debitar_si_alcanza(conn, origen_id, monto):
-            raise SaldoInsuficiente(
-                f"Saldo insuficiente: tienes {formatear_cop(repository.obtener_saldo(conn, origen_id))} "
-                f"y quieres transferir {formatear_cop(monto)}."
-            )
-        repository.ajustar_saldo(conn, destino["cuenta_id"], monto)
-        operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)
-        repository.crear_movimiento(conn, operacion_id, origen_id, -monto, ahora)
-        repository.crear_movimiento(conn, operacion_id, destino["cuenta_id"], monto, ahora)
+        return _mover_dinero(conn, origen_id, destino["cuenta_id"], monto, clave_idempotencia)
+
+
+def _mover_dinero(
+    conn: sqlite3.Connection, origen_id: int, destino_id: int, monto: int, clave_idempotencia: str,
+    verbo: str = "transferir",
+) -> ResultadoOperacion:
+    """Núcleo de una transferencia entre dos cuentas. Debe llamarse DENTRO de db.transaccion.
+
+    Lo usan las transferencias entre personas y Juntia (aportes y retiros):
+      1. si la clave ya existe -> resultado original con repetida=True (RNF-R-03)
+      2. debitar_si_alcanza(origen); si False -> SaldoInsuficiente (rollback, sin movimientos)
+      3. acreditar destino
+      4. crear operación 'TRANSFERENCIA' y los dos movimientos (-monto / +monto)
+    """
+    ahora = db.ahora_iso()
+    previa = repository.obtener_operacion_por_clave(conn, clave_idempotencia)
+    if previa is not None:
+        return _resultado_repetido(conn, previa, origen_id, destino_id, monto)
+    if not repository.debitar_si_alcanza(conn, origen_id, monto):
+        raise SaldoInsuficiente(
+            f"Saldo insuficiente: tienes {formatear_cop(repository.obtener_saldo(conn, origen_id))} "
+            f"y quieres {verbo} {formatear_cop(monto)}."
+        )
+    repository.ajustar_saldo(conn, destino_id, monto)
+    operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)
+    repository.crear_movimiento(conn, operacion_id, origen_id, -monto, ahora)
+    repository.crear_movimiento(conn, operacion_id, destino_id, monto, ahora)
     return ResultadoOperacion(
         operacion_id=operacion_id,
         tipo="TRANSFERENCIA",
@@ -352,7 +376,10 @@ def listar_invitaciones(conn: sqlite3.Connection, usuario: Usuario) -> list[Invi
 def miembros_de_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> list[MiembroBolsillo]:
     """Miembros activos e invitados pendientes. Solo para miembros activos."""
     _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
-    return [MiembroBolsillo(nombre=f["nombre"], estado=f["estado"]) for f in repository.listar_miembros(conn, bolsillo_id)]
+    return [
+        MiembroBolsillo(nombre=f["nombre"], estado=f["estado"], aportado=f["aportado"])
+        for f in repository.listar_miembros(conn, bolsillo_id)
+    ]
 
 
 def invitar_a_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, nombre_invitado: str) -> None:
@@ -399,3 +426,45 @@ def aceptar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: 
 
 def rechazar_invitacion(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> None:
     _responder_invitacion(conn, usuario, bolsillo_id, "RECHAZADO")
+
+
+# ---------- Juntia: aportes, historial y salida ----------
+
+def aportar_a_bolsillo(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, monto: int, clave_idempotencia: str
+) -> ResultadoOperacion:
+    """Un miembro activo pasa dinero de su cuenta personal al bolsillo.
+
+    Es una transferencia normal hacia la cuenta del bolsillo: misma validación de
+    monto, misma verificación de saldo y misma clave de idempotencia (RNF-R-03).
+    """
+    monto = validar_monto(monto)
+    if not isinstance(clave_idempotencia, str) or not clave_idempotencia.strip():
+        raise ErrorValidacion("clave_idempotencia", "es obligatoria")
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    origen_id = _cuenta_propia(conn, usuario)
+    with db.transaccion(conn):
+        # Se vuelve a mirar dentro de la transacción: pudo haber salido del bolsillo justo antes.
+        if repository.obtener_estado_miembro(conn, bolsillo_id, usuario.id) != "ACTIVO":
+            raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")
+        return _mover_dinero(conn, origen_id, bolsillo["cuenta_id"], monto, clave_idempotencia, "aportar")
+
+
+def historial_bolsillo(
+    conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int, pagina: int = 0
+) -> list[Movimiento]:
+    """Movimientos del bolsillo (aportes y retiros), más reciente primero. Solo miembros activos."""
+    _validar_pagina(pagina)
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    return _movimientos_de_cuenta(conn, bolsillo["cuenta_id"], pagina)
+
+
+def salir_de_bolsillo(conn: sqlite3.Connection, usuario: Usuario, bolsillo_id: int) -> None:
+    """Un miembro activo deja el bolsillo. Quien ya aportó no puede salir."""
+    bolsillo = _bolsillo_de_miembro_activo(conn, usuario, bolsillo_id)
+    cuenta_id = _cuenta_propia(conn, usuario)
+    with db.transaccion(conn):
+        if repository.total_aportado(conn, bolsillo["cuenta_id"], cuenta_id) > 0:
+            raise OperacionNoPermitida("Ya aportaste a este bolsillo, así que no puedes salir.")
+        if not repository.cambiar_estado_miembro(conn, bolsillo_id, usuario.id, "ACTIVO", "SALIO", db.ahora_iso()):
+            raise ErrorAutorizacion("Ya no eres miembro de este bolsillo.")

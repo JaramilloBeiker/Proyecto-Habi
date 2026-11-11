@@ -151,18 +151,21 @@ def movimientos_de_operacion(conn: sqlite3.Connection, operacion_id: int) -> lis
 def listar_movimientos(conn: sqlite3.Connection, cuenta_id: int, limite: int, desplazamiento: int) -> list[sqlite3.Row]:
     """Movimientos de la cuenta, del más reciente al más antiguo (ORDER BY id DESC), paginados (RF-06).
 
-    Incluye el tipo de operación y el nombre de la contraparte: el usuario dueño
-    del otro movimiento de la misma operación, o 'FONDEO' si es la cuenta del sistema.
+    Incluye el tipo de operación y la contraparte (dueña del otro movimiento de la
+    misma operación): el nombre del usuario, el nombre del bolsillo, o 'FONDEO'
+    si es la cuenta del sistema. `contraparte_tipo` dice cuál de los tres es.
     """
     return conn.execute(
         """
         SELECT m.id, m.operacion_id, o.tipo AS tipo_operacion, m.monto, m.creado_en,
-               COALESCE(u.nombre, 'FONDEO') AS contraparte
+               COALESCE(u.nombre, b.nombre, 'FONDEO') AS contraparte,
+               c.tipo AS contraparte_tipo
         FROM movimientos m
         JOIN operaciones o ON o.id = m.operacion_id
         JOIN movimientos otro ON otro.operacion_id = m.operacion_id AND otro.id <> m.id
         JOIN cuentas c ON c.id = otro.cuenta_id
         LEFT JOIN usuarios u ON u.id = c.usuario_id
+        LEFT JOIN bolsillos b ON b.cuenta_id = c.id
         WHERE m.cuenta_id = ?
         ORDER BY m.id DESC
         LIMIT ? OFFSET ?
@@ -242,14 +245,41 @@ def obtener_estado_miembro(conn: sqlite3.Connection, bolsillo_id: int, usuario_i
 
 
 def listar_miembros(conn: sqlite3.Connection, bolsillo_id: int) -> list[sqlite3.Row]:
-    """Miembros activos e invitados del bolsillo (nombre, estado), en orden de llegada."""
+    """Miembros activos e invitados del bolsillo (nombre, estado, total aportado)."""
     return conn.execute(
-        "SELECT u.id AS usuario_id, u.nombre, m.estado "
-        "FROM miembros_bolsillo m JOIN usuarios u ON u.id = m.usuario_id "
-        "WHERE m.bolsillo_id = ? AND m.estado IN ('ACTIVO', 'INVITADO') "
-        "ORDER BY m.estado, m.actualizado_en, u.nombre",
+        """
+        SELECT u.id AS usuario_id, u.nombre, m.estado, c.id AS cuenta_id,
+               (SELECT COALESCE(SUM(-mu.monto), 0)
+                FROM movimientos mu
+                JOIN movimientos mb ON mb.operacion_id = mu.operacion_id AND mb.id <> mu.id
+                WHERE mu.cuenta_id = c.id AND mu.monto < 0 AND mb.cuenta_id = b.cuenta_id) AS aportado
+        FROM miembros_bolsillo m
+        JOIN usuarios u ON u.id = m.usuario_id
+        JOIN cuentas c ON c.usuario_id = u.id
+        JOIN bolsillos b ON b.id = m.bolsillo_id
+        WHERE m.bolsillo_id = ? AND m.estado IN ('ACTIVO', 'INVITADO')
+        ORDER BY m.estado, m.actualizado_en, u.nombre
+        """,
         (bolsillo_id,),
     ).fetchall()
+
+
+def total_aportado(conn: sqlite3.Connection, cuenta_bolsillo_id: int, cuenta_usuario_id: int) -> int:
+    """Suma de lo que la cuenta del usuario ha enviado a la cuenta del bolsillo.
+
+    Un aporte es una operación cuyo movimiento negativo es del usuario y el
+    positivo del bolsillo (lo que el bolsillo le paga en un retiro no cuenta).
+    """
+    fila = conn.execute(
+        """
+        SELECT COALESCE(SUM(-mu.monto), 0) AS total
+        FROM movimientos mu
+        JOIN movimientos mb ON mb.operacion_id = mu.operacion_id AND mb.id <> mu.id
+        WHERE mu.cuenta_id = ? AND mu.monto < 0 AND mb.cuenta_id = ?
+        """,
+        (cuenta_usuario_id, cuenta_bolsillo_id),
+    ).fetchone()
+    return fila["total"]
 
 
 def listar_bolsillos_activos(conn: sqlite3.Connection, usuario_id: int) -> list[sqlite3.Row]:
