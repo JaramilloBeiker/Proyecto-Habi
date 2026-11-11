@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block titulo %}{% endblock %} · Habi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
@@ -13,8 +16,10 @@
             <a class="marca" href="{{ url_for('paginas.inicio') }}">Habi</a>
             {% if usuario %}
                 <nav class="navegacion">
-                    <a href="{{ url_for('paginas.cuenta') }}">Mi cuenta</a>
-                    <a href="{{ url_for('paginas.historial') }}">Historial</a>
+                    <a href="{{ url_for('paginas.cuenta') }}"
+                       {% if request.endpoint == 'paginas.cuenta' %}aria-current="page"{% endif %}>Mi cuenta</a>
+                    <a href="{{ url_for('paginas.historial') }}"
+                       {% if request.endpoint == 'paginas.historial' %}aria-current="page"{% endif %}>Historial</a>
                     <span class="navegacion__usuario">{{ usuario.nombre }}</span>
                     <form method="post" action="{{ url_for('paginas.salir') }}">
                         <button class="boton boton--secundario boton--pequeno" type="submit">Cerrar sesión</button>

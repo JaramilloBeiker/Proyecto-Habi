@@ -1,28 +1,44 @@
 /* Habi — hoja de estilos única.
-   Paleta sobria: fondo gris claro, tarjetas blancas, azul marino como color principal.
-   Verde y rojo solo para señalar dinero que entra o sale, y para avisos. */
+   Una sola familia de color (azul marino) para marca, botones y la tarjeta de saldo.
+   Verde y rojo se reservan para el dinero que entra o sale y para los avisos. */
 
 :root {
-    --fondo: #f4f6f8;
+    /* Neutros */
+    --fondo: #f4f6fa;
     --superficie: #ffffff;
-    --borde: #dde2e8;
-    --texto: #1c2733;
-    --texto-suave: #5d6b7a;
+    --superficie-suave: #f8fafc;
+    --borde: #e3e8ef;
+    --borde-fuerte: #cdd5df;
+    --texto: #0f1d2e;
+    --texto-suave: #5f6c7b;
+    --texto-tenue: #8a96a3;
 
-    --primario: #1d4e89;
-    --primario-oscuro: #163d6c;
-    --primario-claro: #e8eef6;
+    /* Marca: escala de azul marino */
+    --marino-900: #0e2747;
+    --marino-800: #143563;
+    --marino-700: #1b4580;
+    --marino-100: #e6edf7;
+    --marino-50: #f2f6fb;
 
-    --positivo: #1e7a4c;
-    --negativo: #b3261e;
+    --primario: var(--marino-700);
+    --primario-oscuro: var(--marino-800);
+    --primario-claro: var(--marino-100);
 
-    --exito-fondo: #e9f5ee;
-    --exito-borde: #b9dcc7;
-    --error-fondo: #fcecea;
-    --error-borde: #f0c4c0;
+    /* Dinero y avisos */
+    --positivo: #157347;
+    --negativo: #b42318;
+    --exito-fondo: #ecf7f1;
+    --exito-borde: #bfe3cf;
+    --error-fondo: #fdf0ef;
+    --error-borde: #f3c9c4;
 
-    --radio: 8px;
-    --sombra: 0 1px 2px rgba(16, 24, 40, 0.06);
+    /* Forma */
+    --radio-pequeno: 8px;
+    --radio: 12px;
+    --radio-grande: 16px;
+    --sombra: 0 1px 2px rgba(15, 29, 46, 0.04), 0 1px 3px rgba(15, 29, 46, 0.06);
+    --sombra-alta: 0 18px 40px -18px rgba(14, 39, 71, 0.55);
+    --transicion: 150ms ease;
 }
 
 * {
@@ -33,42 +49,49 @@ body {
     margin: 0;
     background: var(--fondo);
     color: var(--texto);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
 }
 
 a {
     color: var(--primario);
+    font-weight: 500;
     text-decoration: none;
 }
 
 a:hover {
+    color: var(--primario-oscuro);
     text-decoration: underline;
 }
 
 h1, h2 {
-    margin: 0 0 4px;
+    margin: 0;
+    color: var(--texto);
+    letter-spacing: -0.02em;
     line-height: 1.25;
 }
 
 h1 {
-    font-size: 22px;
+    font-size: 26px;
+    font-weight: 700;
 }
 
 h2 {
-    font-size: 17px;
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .contenedor {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 0 16px;
+    padding: 0 24px;
 }
 
 main.contenedor {
-    padding-top: 28px;
-    padding-bottom: 48px;
+    padding-top: 40px;
+    padding-bottom: 64px;
 }
 
 .texto-suave {
@@ -87,18 +110,70 @@ main.contenedor {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 60px;
+    min-height: 68px;
 }
 
 .marca {
-    font-size: 19px;
-    font-weight: 700;
-    color: var(--primario);
-    letter-spacing: 0.2px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--marino-800);
 }
 
 .marca:hover {
+    color: var(--marino-900);
     text-decoration: none;
+}
+
+/* ---------- Navegación ---------- */
+
+.navegacion {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+}
+
+.navegacion form {
+    margin: 0 0 0 10px;
+}
+
+.navegacion a {
+    padding: 8px 12px;
+    border-radius: var(--radio-pequeno);
+    color: var(--texto-suave);
+    transition: background var(--transicion), color var(--transicion);
+}
+
+.navegacion a:hover,
+.navegacion a[aria-current="page"] {
+    background: var(--marino-50);
+    color: var(--primario);
+    text-decoration: none;
+}
+
+.navegacion a,
+.navegacion .boton {
+    white-space: nowrap;
+}
+
+.navegacion__usuario {
+    margin-left: 10px;
+    padding-left: 16px;
+    border-left: 1px solid var(--borde);
+    color: var(--texto);
+    font-weight: 600;
+}
+
+/* ---------- Encabezado de página ---------- */
+
+.pagina__encabezado {
+    margin-bottom: 28px;
+}
+
+.pagina__encabezado p {
+    margin: 6px 0 0;
+    color: var(--texto-suave);
 }
 
 /* ---------- Tarjetas ---------- */
@@ -108,209 +183,16 @@ main.contenedor {
     border: 1px solid var(--borde);
     border-radius: var(--radio);
     box-shadow: var(--sombra);
-    padding: 24px;
+    padding: 28px;
 }
 
 .tarjeta__encabezado {
-    margin-bottom: 18px;
+    margin-bottom: 22px;
 }
 
 .tarjeta__encabezado p {
-    margin: 0;
-}
-
-/* ---------- Formularios ---------- */
-
-.campo {
-    margin-bottom: 16px;
-}
-
-.campo label {
-    display: block;
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 6px;
-}
-
-.campo input {
-    width: 100%;
-    padding: 10px 12px;
-    font: inherit;
-    color: var(--texto);
-    background: var(--superficie);
-    border: 1px solid var(--borde);
-    border-radius: 6px;
-}
-
-.campo input:focus {
-    outline: none;
-    border-color: var(--primario);
-    box-shadow: 0 0 0 3px var(--primario-claro);
-}
-
-.campo--error input {
-    border-color: var(--negativo);
-}
-
-.campo__ayuda {
     margin: 6px 0 0;
-    font-size: 13px;
-    color: var(--texto-suave);
-}
-
-.campo__error {
-    margin: 6px 0 0;
-    font-size: 13px;
-    color: var(--negativo);
-}
-
-/* ---------- Botones ---------- */
-
-.boton {
-    display: inline-block;
-    padding: 10px 18px;
-    font: inherit;
-    font-weight: 600;
-    color: #ffffff;
-    background: var(--primario);
-    border: 1px solid var(--primario);
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-.boton:hover {
-    background: var(--primario-oscuro);
-    border-color: var(--primario-oscuro);
-}
-
-.boton:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
-.boton--bloque {
-    width: 100%;
-}
-
-.boton--secundario {
-    color: var(--texto);
-    background: var(--superficie);
-    border-color: var(--borde);
-}
-
-.boton--secundario:hover {
-    background: var(--fondo);
-    border-color: var(--borde);
-}
-
-.boton--pequeno {
-    padding: 6px 12px;
     font-size: 14px;
-}
-
-/* ---------- Avisos (RNF-U-01) ---------- */
-
-.aviso {
-    padding: 12px 16px;
-    margin-bottom: 20px;
-    border: 1px solid;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-.aviso--exito {
-    background: var(--exito-fondo);
-    border-color: var(--exito-borde);
-    color: var(--positivo);
-}
-
-.aviso--error {
-    background: var(--error-fondo);
-    border-color: var(--error-borde);
-    color: var(--negativo);
-}
-
-/* ---------- Páginas de acceso ---------- */
-
-.acceso {
-    max-width: 400px;
-    margin: 32px auto 0;
-}
-
-.acceso__pie {
-    margin: 18px 0 0;
-    text-align: center;
-    font-size: 14px;
-    color: var(--texto-suave);
-}
-
-/* ---------- Navegación ---------- */
-
-.navegacion {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    font-size: 14px;
-}
-
-.navegacion form {
-    margin: 0;
-}
-
-.navegacion__usuario {
-    color: var(--texto-suave);
-    padding-left: 20px;
-    border-left: 1px solid var(--borde);
-}
-
-/* ---------- Saldo ---------- */
-
-.saldo {
-    margin-bottom: 24px;
-}
-
-.saldo__etiqueta {
-    margin: 0;
-    font-size: 14px;
-    color: var(--texto-suave);
-}
-
-.saldo__valor {
-    margin: 4px 0 0;
-    font-size: 32px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 600px) {
-    .navegacion {
-        gap: 12px;
-    }
-
-    .navegacion__usuario {
-        display: none;
-    }
-}
-
-/* ---------- Panel de cuenta ---------- */
-
-.rejilla {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
-    align-items: start;
-}
-
-@media (max-width: 760px) {
-    .rejilla {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* ---------- Movimientos ---------- */
-
-.recientes {
-    margin-top: 24px;
 }
 
 .tarjeta__encabezado--fila {
@@ -318,90 +200,126 @@ main.contenedor {
     align-items: baseline;
     justify-content: space-between;
     gap: 12px;
+}
+
+.tarjeta__encabezado--fila a {
     font-size: 14px;
 }
 
-.tabla-contenedor {
-    overflow-x: auto;
-}
+/* ---------- Saldo (punto focal) ---------- */
 
-.tabla {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-}
-
-.tabla th {
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--texto-suave);
-    padding: 0 12px 10px;
-    border-bottom: 1px solid var(--borde);
-}
-
-.tabla td {
-    padding: 12px;
-    border-bottom: 1px solid var(--borde);
-    white-space: nowrap;
-}
-
-.tabla tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.tabla th:first-child,
-.tabla td:first-child {
-    padding-left: 0;
-}
-
-.tabla th:last-child,
-.tabla td:last-child {
-    padding-right: 0;
-}
-
-.tabla__fecha {
-    color: var(--texto-suave);
-    font-variant-numeric: tabular-nums;
-}
-
-.tabla__monto {
-    text-align: right !important;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-
-.monto--positivo {
-    color: var(--positivo);
-}
-
-.monto--negativo {
-    color: var(--negativo);
-}
-
-.vacio {
-    margin: 0;
-    padding: 24px 0;
-    text-align: center;
-    color: var(--texto-suave);
-}
-
-.paginacion {
+.saldo {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--borde);
+    gap: 24px;
+    margin-bottom: 28px;
+    padding: 32px 36px;
+    border-radius: var(--radio-grande);
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--marino-900) 0%, var(--marino-700) 100%);
+    box-shadow: var(--sombra-alta);
+}
+
+.saldo__etiqueta {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.saldo__valor {
+    margin: 10px 0 0;
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.saldo__detalle {
+    display: flex;
+    gap: 32px;
+    margin: 0;
     font-size: 14px;
+}
+
+.saldo__detalle dt {
+    margin-bottom: 2px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.saldo__detalle dd {
+    margin: 0;
+    font-weight: 600;
+}
+
+/* ---------- Formularios ---------- */
+
+.campo {
+    margin-bottom: 20px;
+}
+
+.campo label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--texto);
+}
+
+.campo input {
+    width: 100%;
+    height: 46px;
+    padding: 0 14px;
+    font: inherit;
+    color: var(--texto);
+    background: var(--superficie);
+    border: 1px solid var(--borde-fuerte);
+    border-radius: var(--radio-pequeno);
+    transition: border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.campo input:hover {
+    border-color: var(--texto-tenue);
+}
+
+.campo input:focus {
+    outline: none;
+    border-color: var(--primario);
+    box-shadow: 0 0 0 4px var(--primario-claro);
+}
+
+.campo--error input,
+.campo--error input:hover {
+    border-color: var(--negativo);
+}
+
+.campo--error input:focus {
+    box-shadow: 0 0 0 4px var(--error-fondo);
+}
+
+.campo__ayuda,
+.campo__error,
+.campo__vista {
+    margin: 8px 0 0;
+    font-size: 13px;
+}
+
+.campo__ayuda {
+    color: var(--texto-suave);
+}
+
+.campo__error {
+    color: var(--negativo);
+    font-weight: 500;
 }
 
 /* Vista previa del monto que agrega app.js */
 .campo__vista {
-    margin: 6px 0 0;
-    font-size: 13px;
     font-weight: 600;
     color: var(--primario);
 }
@@ -422,8 +340,270 @@ main.contenedor {
     margin: 0;
 }
 
-/* En celular cada movimiento se apila: concepto y monto arriba, contraparte y fecha abajo. */
+/* ---------- Botones ---------- */
+
+.boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 46px;
+    padding: 0 22px;
+    font: inherit;
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--primario);
+    border: 1px solid var(--primario);
+    border-radius: var(--radio-pequeno);
+    cursor: pointer;
+    transition: background var(--transicion), border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.boton:hover {
+    color: #ffffff;
+    background: var(--primario-oscuro);
+    border-color: var(--primario-oscuro);
+    text-decoration: none;
+}
+
+.boton:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 4px var(--primario-claro);
+}
+
+.boton:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.boton--bloque {
+    width: 100%;
+}
+
+.boton--secundario {
+    color: var(--texto);
+    background: var(--superficie);
+    border-color: var(--borde-fuerte);
+}
+
+.boton--secundario:hover {
+    color: var(--texto);
+    background: var(--superficie-suave);
+    border-color: var(--texto-tenue);
+}
+
+.boton--pequeno {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 14px;
+}
+
+/* ---------- Avisos (RNF-U-01) ---------- */
+
+.aviso {
+    margin-bottom: 24px;
+    padding: 14px 18px;
+    border: 1px solid;
+    border-radius: var(--radio-pequeno);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.aviso--exito {
+    background: var(--exito-fondo);
+    border-color: var(--exito-borde);
+    color: var(--positivo);
+}
+
+.aviso--error {
+    background: var(--error-fondo);
+    border-color: var(--error-borde);
+    color: var(--negativo);
+}
+
+/* ---------- Páginas de acceso ---------- */
+
+.acceso {
+    max-width: 420px;
+    margin: 40px auto 0;
+}
+
+.acceso .tarjeta {
+    padding: 36px;
+}
+
+.acceso h1 {
+    font-size: 24px;
+}
+
+.acceso__pie {
+    margin: 22px 0 0;
+    text-align: center;
+    font-size: 14px;
+    color: var(--texto-suave);
+}
+
+/* ---------- Panel de cuenta ---------- */
+
+.rejilla {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
+.recientes {
+    margin-top: 24px;
+}
+
+/* ---------- Movimientos ---------- */
+
+.tabla-contenedor {
+    overflow-x: auto;
+}
+
+.tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tabla th {
+    padding: 0 16px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--texto-tenue);
+    border-bottom: 1px solid var(--borde);
+}
+
+.tabla td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+}
+
+.tabla tbody tr {
+    transition: background var(--transicion);
+}
+
+.tabla tbody tr:hover {
+    background: var(--superficie-suave);
+}
+
+.tabla tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.tabla th:first-child,
+.tabla td:first-child {
+    padding-left: 0;
+}
+
+.tabla th:last-child,
+.tabla td:last-child {
+    padding-right: 0;
+}
+
+.tabla__concepto {
+    font-weight: 500;
+}
+
+.tabla__contraparte,
+.tabla__fecha {
+    color: var(--texto-suave);
+}
+
+.tabla__monto {
+    text-align: right !important;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.monto--positivo {
+    color: var(--positivo);
+}
+
+.monto--negativo {
+    color: var(--negativo);
+}
+
+.vacio {
+    margin: 0;
+    padding: 32px 0;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+.paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--borde);
+    font-size: 14px;
+}
+
+/* ---------- Pantallas medianas ---------- */
+
+@media (max-width: 760px) {
+    .rejilla {
+        grid-template-columns: 1fr;
+    }
+
+    .saldo {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* ---------- Celular ---------- */
+
 @media (max-width: 600px) {
+    .contenedor {
+        padding: 0 16px;
+    }
+
+    main.contenedor {
+        padding-top: 28px;
+    }
+
+    h1 {
+        font-size: 22px;
+    }
+
+    .tarjeta,
+    .acceso .tarjeta {
+        padding: 22px;
+    }
+
+    .saldo {
+        padding: 26px 24px;
+    }
+
+    .saldo__valor {
+        font-size: 36px;
+    }
+
+    .navegacion {
+        gap: 0;
+    }
+
+    .navegacion form {
+        margin-left: 6px;
+    }
+
+    .navegacion a {
+        padding: 6px 8px;
+    }
+
+    .navegacion__usuario {
+        display: none;
+    }
+
+    /* Cada movimiento se apila: concepto y monto arriba, contraparte y fecha abajo. */
     .tabla thead {
         display: none;
     }
@@ -433,12 +613,16 @@ main.contenedor {
         grid-template-columns: 1fr auto;
         column-gap: 12px;
         row-gap: 2px;
-        padding: 12px 0;
+        padding: 14px 0;
         border-bottom: 1px solid var(--borde);
     }
 
     .tabla tbody tr:last-child {
         border-bottom: none;
+    }
+
+    .tabla tbody tr:hover {
+        background: none;
     }
 
     .tabla td {
@@ -460,7 +644,6 @@ main.contenedor {
     .tabla__fecha {
         grid-column: 1 / -1;
         font-size: 13px;
-        color: var(--texto-suave);
     }
 
     .tabla__contraparte {

@@ -48,8 +48,9 @@ marcando el campo que falló (RNF-U-01, RNF-U-03).
   envía dos veces (doble clic o recarga), la transferencia no se repite (RNF-R-03).
 - JavaScript (`static/js/app.js`) solo agrega dos mejoras: deshabilita el botón al enviar y muestra
   el monto en COP mientras se escribe. Sin JavaScript todo sigue funcionando.
-- Paleta sobria: fondo gris claro, tarjetas blancas, azul marino como color principal; verde y rojo
-  solo para dinero que entra o sale. En celular la tabla de movimientos se apila.
+- Diseño: fuente Inter (Google Fonts), una sola escala de azul marino para marca, botones y la
+  tarjeta de saldo (el punto focal del panel); verde y rojo solo para dinero que entra o sale.
+  En celular la tabla de movimientos se apila.
 
 ## API
 
