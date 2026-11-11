@@ -4,11 +4,12 @@
 {% block titulo %}Historial{% endblock %}
 
 {% block contenido %}
+<div class="pagina__encabezado">
+    <h1>Historial de movimientos</h1>
+    <p class="texto-suave">Del más reciente al más antiguo, en bloques de 20.</p>
+</div>
+
 <section class="tarjeta">
-    <div class="tarjeta__encabezado">
-        <h1>Historial de movimientos</h1>
-        <p class="texto-suave">Del más reciente al más antiguo, en bloques de 20.</p>
-    </div>
 
     {% if movimientos %}
         {{ tabla_movimientos(movimientos) }}

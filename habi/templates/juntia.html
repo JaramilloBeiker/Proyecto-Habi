@@ -6,12 +6,18 @@
 {% block contenido %}
 {% set estados = {"PENDIENTE": "Pendiente", "EJECUTADO": "Ejecutado", "RECHAZADO": "Rechazado", "EXPIRADO": "Expirado"} %}
 
-<p class="migas"><a href="{{ url_for('paginas.juntias') }}">Juntias</a> / {{ bolsillo.nombre }}</p>
+<div class="pagina__encabezado">
+    <p class="migas"><a href="{{ url_for('paginas.juntias') }}">Juntias</a> / {{ bolsillo.nombre }}</p>
+    <h1>{{ bolsillo.nombre }}</h1>
+    <p class="texto-suave">Creado por {{ bolsillo.creador }}</p>
+</div>
 
-<section class="tarjeta saldo">
-    <p class="saldo__etiqueta">Saldo del bolsillo</p>
-    <p class="saldo__valor">{{ bolsillo.saldo | cop }}</p>
-    <dl class="resumen">
+<section class="saldo">
+    <div>
+        <p class="saldo__etiqueta">Saldo del bolsillo</p>
+        <p class="saldo__valor">{{ bolsillo.saldo | cop }}</p>
+    </div>
+    <dl class="saldo__detalle">
         <div>
             <dt>Disponible</dt>
             <dd>{{ bolsillo.disponible | cop }}</dd>
@@ -63,7 +69,7 @@
         <form method="post" action="{{ url_for('paginas.proponer_retiro_juntia', bolsillo_id=bolsillo.id) }}">
             {{ campo("destino", "Usuario que recibe", ident="destino-retiro",
                      valor=valores_retiro.get("destino", ""), errores=errores_retiro,
-                     ayuda="Cualquier usuario de Habi, incluido tú.",
+                     ayuda="Cualquier usuario de Nexo, incluido tú.",
                      required=true, autocomplete="off") }}
             {{ campo("monto", "Monto (COP)", tipo="number", ident="monto-retiro",
                      valor=valores_retiro.get("monto", ""), errores=errores_retiro,
