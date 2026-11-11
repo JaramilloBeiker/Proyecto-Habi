@@ -14,6 +14,7 @@ class ErrorValidacion(HabiError):
 
     def __init__(self, campo: str, mensaje: str):
         self.campo = campo
+        self.mensaje = mensaje  # sin el nombre del campo, para mostrarlo junto al input
         super().__init__(f"{campo}: {mensaje}")
 
 

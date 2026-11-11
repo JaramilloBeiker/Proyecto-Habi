@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block titulo %}Mi cuenta{% endblock %}
+
+{% block contenido %}
+<section class="tarjeta saldo">
+    <p class="saldo__etiqueta">Saldo disponible</p>
+    <p class="saldo__valor">{{ saldo | cop }}</p>
+</section>
+{% endblock %}

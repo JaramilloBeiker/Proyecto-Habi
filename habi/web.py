@@ -46,6 +46,11 @@ def crear_app(ruta_db=None, secret_key=None) -> Flask:
     conn.close()
 
     app.register_blueprint(api)
+    # Páginas HTML. Se importa aquí porque paginas.py usa utilidades de este módulo.
+    from habi.paginas import paginas
+
+    app.register_blueprint(paginas)
+    app.add_template_filter(formatear_cop, "cop")
     app.teardown_appcontext(cerrar_conexion)
     app.register_error_handler(HabiError, manejar_error_negocio)
     return app
@@ -108,6 +113,17 @@ def movimiento_a_dict(m) -> dict:
     }
 
 
+def abrir_sesion(conn, usuario) -> None:
+    """Guarda en la cookie firmada el token de una sesión nueva (RF-02).
+
+    Si ya había una sesión en este navegador, se cierra antes de abrir la nueva.
+    """
+    services.cerrar_sesion(conn, session.get("token"))
+    session.clear()
+    session.permanent = True
+    session["token"] = services.crear_sesion(conn, usuario)
+
+
 def usuario_actual():
     """Usuario de la sesión iniciada. Sin sesión válida -> ErrorAutenticacion (401)."""
     return services.usuario_de_sesion(obtener_conexion(), session.get("token"))
@@ -153,11 +169,7 @@ def login():
     datos = leer_datos()
     conn = obtener_conexion()
     usuario = services.iniciar_sesion(conn, leer_texto(datos, "nombre"), leer_texto(datos, "password"))
-    # Si ya había una sesión en este navegador, se cierra antes de abrir la nueva.
-    services.cerrar_sesion(conn, session.get("token"))
-    session.clear()
-    session.permanent = True
-    session["token"] = services.crear_sesion(conn, usuario)
+    abrir_sesion(conn, usuario)
     return respuesta_ok(f"Bienvenido, {usuario.nombre}.", usuario={"nombre": usuario.nombre})
 
 

@@ -10,6 +10,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from habi import config, db, repository, security
+from habi.formato import formatear_cop
 from habi.dominio import (
     ErrorAutenticacion,
     ErrorValidacion,
@@ -35,9 +36,9 @@ def validar_monto(monto: object, campo: str = "monto") -> int:
     if isinstance(monto, bool) or not isinstance(monto, int):
         raise ErrorValidacion(campo, "debe ser un número entero de pesos (sin decimales)")
     if monto < config.MONTO_MINIMO:
-        raise ErrorValidacion(campo, f"debe ser mayor o igual a {config.MONTO_MINIMO}")
+        raise ErrorValidacion(campo, f"debe ser mayor o igual a {formatear_cop(config.MONTO_MINIMO)}")
     if monto > config.MONTO_MAXIMO:
-        raise ErrorValidacion(campo, f"no puede superar {config.MONTO_MAXIMO}")
+        raise ErrorValidacion(campo, f"no puede superar {formatear_cop(config.MONTO_MAXIMO)}")
     return monto
 
 
@@ -214,8 +215,8 @@ def transferir(
             return _resultado_repetido(conn, previa, origen_id, destino["cuenta_id"], monto)
         if not repository.debitar_si_alcanza(conn, origen_id, monto):
             raise SaldoInsuficiente(
-                f"Saldo insuficiente: tienes {repository.obtener_saldo(conn, origen_id)} COP "
-                f"y quieres transferir {monto} COP."
+                f"Saldo insuficiente: tienes {formatear_cop(repository.obtener_saldo(conn, origen_id))} "
+                f"y quieres transferir {formatear_cop(monto)}."
             )
         repository.ajustar_saldo(conn, destino["cuenta_id"], monto)
         operacion_id = repository.crear_operacion(conn, "TRANSFERENCIA", monto, ahora, clave_idempotencia)

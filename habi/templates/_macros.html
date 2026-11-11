@@ -1,0 +1,12 @@
+{# Campo de formulario con su etiqueta y, si lo hay, el error de ese campo (RNF-U-03). #}
+{% macro campo(nombre, etiqueta, tipo="text", valor="", errores={}, ayuda="") %}
+    <div class="campo {% if errores.get(nombre) %}campo--error{% endif %}">
+        <label for="{{ nombre }}">{{ etiqueta }}</label>
+        <input id="{{ nombre }}" name="{{ nombre }}" type="{{ tipo }}" value="{{ valor }}" {{ kwargs | xmlattr }}>
+        {% if errores.get(nombre) %}
+            <p class="campo__error">{{ errores[nombre][:1] | upper }}{{ errores[nombre][1:] }}.</p>
+        {% elif ayuda %}
+            <p class="campo__ayuda">{{ ayuda }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}

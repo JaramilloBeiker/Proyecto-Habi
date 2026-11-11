@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo %}
+
+{% block titulo %}Iniciar sesión{% endblock %}
+
+{% block contenido %}
+<section class="acceso">
+    <div class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h1>Iniciar sesión</h1>
+            <p class="texto-suave">Ingresa para ver tu saldo y mover tu dinero.</p>
+        </div>
+
+        <form method="post" action="{{ url_for('paginas.entrar') }}">
+            {{ campo("nombre", "Usuario", valor=nombre, required=true, autocomplete="username", autofocus=true) }}
+            {{ campo("password", "Contraseña", tipo="password", required=true, autocomplete="current-password") }}
+            <button class="boton boton--bloque" type="submit">Entrar</button>
+        </form>
+    </div>
+    <p class="acceso__pie">¿No tienes cuenta? <a href="{{ url_for('paginas.registro') }}">Regístrate</a></p>
+</section>
+{% endblock %}
