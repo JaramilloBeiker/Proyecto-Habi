@@ -29,7 +29,7 @@ window.addEventListener("pageshow", function () {
 });
 
 // 2. Vista previa del monto en COP mientras se escribe (RNF-U-02).
-document.querySelectorAll('input[name="monto"]').forEach(function (campo) {
+document.querySelectorAll('input[name="monto"], input[name="meta"]').forEach(function (campo) {
     const vista = document.createElement("p");
     vista.className = "campo__vista";
     campo.insertAdjacentElement("afterend", vista);

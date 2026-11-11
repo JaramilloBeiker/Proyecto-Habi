@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, progreso, tabla_movimientos %}
+
+{% block titulo %}{{ bolsillo.nombre }}{% endblock %}
+
+{% block contenido %}
+{% set estados = {"PENDIENTE": "Pendiente", "EJECUTADO": "Ejecutado", "RECHAZADO": "Rechazado", "EXPIRADO": "Expirado"} %}
+
+<p class="migas"><a href="{{ url_for('paginas.juntias') }}">Juntias</a> / {{ bolsillo.nombre }}</p>
+
+<section class="tarjeta saldo">
+    <p class="saldo__etiqueta">Saldo del bolsillo</p>
+    <p class="saldo__valor">{{ bolsillo.saldo | cop }}</p>
+    <dl class="resumen">
+        <div>
+            <dt>Disponible</dt>
+            <dd>{{ bolsillo.disponible | cop }}</dd>
+        </div>
+        <div>
+            <dt>Reservado en retiros</dt>
+            <dd>{{ bolsillo.reservado | cop }}</dd>
+        </div>
+        <div>
+            <dt>Meta</dt>
+            <dd>{{ bolsillo.meta | cop }}</dd>
+        </div>
+    </dl>
+    {{ progreso(bolsillo) }}
+</section>
+
+{% set errores_aporte = errores if formulario == "aporte" else {} %}
+{% set valores_aporte = valores if formulario == "aporte" else {} %}
+{% set errores_retiro = errores if formulario == "retiro" else {} %}
+{% set valores_retiro = valores if formulario == "retiro" else {} %}
+{% set errores_invitacion = errores if formulario == "invitacion" else {} %}
+{% set valores_invitacion = valores if formulario == "invitacion" else {} %}
+
+<div class="rejilla">
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Aportar</h2>
+            <p class="texto-suave">Pasa dinero de tu cuenta personal a este bolsillo.</p>
+        </div>
+        <form method="post" action="{{ url_for('paginas.aportar_juntia', bolsillo_id=bolsillo.id) }}">
+            {# RNF-R-03: reenviar este formulario no repite el aporte. #}
+            <input type="hidden" name="clave_idempotencia" value="{{ clave }}">
+            {{ campo("monto", "Monto (COP)", tipo="number", ident="monto-aporte",
+                     valor=valores_aporte.get("monto", ""), errores=errores_aporte,
+                     ayuda="Entre 1 y 5.000.000 COP, sin decimales.",
+                     required=true, min=1, max=5000000, step=1, inputmode="numeric") }}
+            <button class="boton" type="submit">Aportar</button>
+        </form>
+    </section>
+
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Proponer retiro</h2>
+            <p class="texto-suave">
+                Se ejecuta solo si todos los miembros votan a favor. Sin respuesta en
+                {{ dias_expiracion }} días, expira.
+            </p>
+        </div>
+        <form method="post" action="{{ url_for('paginas.proponer_retiro_juntia', bolsillo_id=bolsillo.id) }}">
+            {{ campo("destino", "Usuario que recibe", ident="destino-retiro",
+                     valor=valores_retiro.get("destino", ""), errores=errores_retiro,
+                     ayuda="Cualquier usuario de Habi, incluido tú.",
+                     required=true, autocomplete="off") }}
+            {{ campo("monto", "Monto (COP)", tipo="number", ident="monto-retiro",
+                     valor=valores_retiro.get("monto", ""), errores=errores_retiro,
+                     ayuda="Hasta " ~ (bolsillo.disponible | cop) ~ " disponibles.",
+                     required=true, min=1, max=5000000, step=1, inputmode="numeric") }}
+            {{ campo("motivo", "Motivo (opcional)", ident="motivo-retiro",
+                     valor=valores_retiro.get("motivo", ""), errores=errores_retiro,
+                     maxlength=140, autocomplete="off") }}
+            <button class="boton" type="submit">Proponer retiro</button>
+        </form>
+    </section>
+</div>
+
+<section class="tarjeta seccion">
+    <div class="tarjeta__encabezado">
+        <h2>Retiros</h2>
+        <p class="texto-suave">Mientras un retiro está pendiente, su monto queda reservado.</p>
+    </div>
+    {% if retiros %}
+        <ul class="lista">
+            {% for r in retiros %}
+                {% set mi_voto = r.voto_de(usuario.nombre) %}
+                <li class="lista__fila lista__fila--bloque">
+                    <div class="lista__titulo">
+                        <span>
+                            <strong>{{ r.monto | cop }}</strong> para {{ r.destino }}
+                            <span class="etiqueta etiqueta--{{ r.estado | lower }}">{{ estados[r.estado] }}</span>
+                        </span>
+                        {% if r.estado == "PENDIENTE" and mi_voto and mi_voto.voto is none %}
+                            <div class="acciones">
+                                <form method="post" action="{{ url_for('paginas.votar_retiro_juntia', bolsillo_id=bolsillo.id, retiro_id=r.id) }}">
+                                    <input type="hidden" name="voto" value="A_FAVOR">
+                                    <button class="boton boton--pequeno" type="submit">A favor</button>
+                                </form>
+                                <form method="post" action="{{ url_for('paginas.votar_retiro_juntia', bolsillo_id=bolsillo.id, retiro_id=r.id) }}">
+                                    <input type="hidden" name="voto" value="EN_CONTRA">
+                                    <button class="boton boton--secundario boton--pequeno" type="submit">En contra</button>
+                                </form>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <p class="lista__detalle texto-suave">
+                        Propuso {{ r.proponente }} el <time datetime="{{ r.creado_en }}">{{ r.creado_en }}</time>
+                        {%- if r.motivo %} · {{ r.motivo }}{% endif %}
+                        {%- if r.estado == "PENDIENTE" %} · vence el <time datetime="{{ r.expira_en }}">{{ r.expira_en }}</time>{% endif %}
+                    </p>
+                    <p class="lista__detalle texto-suave">
+                        Votos:
+                        {% for v in r.votos -%}
+                            {{ v.nombre }} ({{ "a favor" if v.voto == "A_FAVOR" else "en contra" if v.voto == "EN_CONTRA" else "sin votar" }}){{ ", " if not loop.last }}
+                        {%- endfor %}
+                    </p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="vacio">Aún no hay retiros propuestos.</p>
+    {% endif %}
+</section>
+
+<section class="tarjeta seccion">
+    <div class="tarjeta__encabezado">
+        <h2>Miembros</h2>
+        <p class="texto-suave">Solo los miembros activos ven el saldo. Quien ya aportó no puede salir.</p>
+    </div>
+    <ul class="lista">
+        {% for m in miembros %}
+            <li class="lista__fila">
+                <span>
+                    {{ m.nombre }}
+                    {% if m.estado == "INVITADO" %}<span class="etiqueta etiqueta--pendiente">Invitado</span>{% endif %}
+                </span>
+                {% if m.estado == "ACTIVO" %}<span class="monto">Aportó {{ m.aportado | cop }}</span>{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+
+    <form class="formulario-en-linea" method="post" action="{{ url_for('paginas.invitar_juntia', bolsillo_id=bolsillo.id) }}">
+        {{ campo("invitado", "Invitar a un usuario", valor=valores_invitacion.get("invitado", ""),
+                 errores=errores_invitacion, required=true, autocomplete="off") }}
+        <button class="boton boton--secundario" type="submit">Invitar</button>
+    </form>
+
+    <form class="salida" method="post" action="{{ url_for('paginas.salir_juntia', bolsillo_id=bolsillo.id) }}">
+        <button class="boton boton--secundario boton--pequeno" type="submit">Salir del bolsillo</button>
+    </form>
+</section>
+
+<section class="tarjeta seccion">
+    <div class="tarjeta__encabezado">
+        <h2>Movimientos del bolsillo</h2>
+    </div>
+    {% if movimientos %}
+        {{ tabla_movimientos(movimientos, de_bolsillo=true) }}
+    {% elif pagina == 0 %}
+        <p class="vacio">Aún no hay aportes.</p>
+    {% else %}
+        <p class="vacio">No hay más movimientos.</p>
+    {% endif %}
+
+    {% if pagina > 0 or hay_mas %}
+        <nav class="paginacion">
+            {% if pagina > 0 %}
+                <a class="boton boton--secundario boton--pequeno"
+                   href="{{ url_for('paginas.juntia', bolsillo_id=bolsillo.id, pagina=pagina - 1) }}">Más recientes</a>
+            {% else %}
+                <span></span>
+            {% endif %}
+            <span class="texto-suave">Página {{ pagina + 1 }}</span>
+            {% if hay_mas %}
+                <a class="boton boton--secundario boton--pequeno"
+                   href="{{ url_for('paginas.juntia', bolsillo_id=bolsillo.id, pagina=pagina + 1) }}">Más antiguos</a>
+            {% else %}
+                <span></span>
+            {% endif %}
+        </nav>
+    {% endif %}
+</section>
+{% endblock %}

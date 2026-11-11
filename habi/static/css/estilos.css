@@ -471,3 +471,168 @@ main.contenedor {
         order: 4;
     }
 }
+
+/* ---------- Juntia (bolsillos compartidos) ---------- */
+
+.seccion {
+    margin-top: 24px;
+}
+
+.migas {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--texto-suave);
+}
+
+.resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 32px;
+    margin: 16px 0;
+    font-size: 14px;
+}
+
+.resumen dt {
+    color: var(--texto-suave);
+}
+
+.resumen dd {
+    margin: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.progreso {
+    height: 8px;
+    background: var(--primario-claro);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progreso__barra {
+    height: 100%;
+    background: var(--primario);
+}
+
+.progreso__texto {
+    margin: 6px 0 0;
+    font-size: 13px;
+}
+
+.lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.lista__fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--borde);
+    font-size: 14px;
+}
+
+.lista__fila:last-child {
+    border-bottom: none;
+}
+
+.lista__fila--bloque {
+    display: block;
+}
+
+.lista__titulo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.lista__detalle {
+    margin: 4px 0 0;
+    font-size: 13px;
+}
+
+.monto {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.acciones {
+    display: flex;
+    gap: 8px;
+}
+
+.acciones form {
+    margin: 0;
+}
+
+.etiqueta {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 10px;
+    background: var(--fondo);
+    color: var(--texto-suave);
+}
+
+.etiqueta--pendiente {
+    background: var(--primario-claro);
+    color: var(--primario);
+}
+
+.etiqueta--ejecutado {
+    background: var(--exito-fondo);
+    color: var(--positivo);
+}
+
+.etiqueta--rechazado {
+    background: var(--error-fondo);
+    color: var(--negativo);
+}
+
+.formulario-en-linea {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--borde);
+}
+
+.formulario-en-linea .campo {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* El botón queda alineado con el input, no con la etiqueta. */
+.formulario-en-linea .boton {
+    margin-top: 27px;
+}
+
+.salida {
+    margin-top: 16px;
+    text-align: right;
+}
+
+@media (max-width: 600px) {
+    .lista__titulo,
+    .lista__fila {
+        flex-wrap: wrap;
+    }
+
+    .formulario-en-linea {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .formulario-en-linea .boton {
+        margin-top: 0;
+    }
+}

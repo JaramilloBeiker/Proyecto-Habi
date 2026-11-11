@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, progreso %}
+
+{% block titulo %}Juntias{% endblock %}
+
+{% block contenido %}
+<div class="tarjeta__encabezado">
+    <h1>Juntias</h1>
+    <p class="texto-suave">Bolsillos compartidos para juntar dinero con otras personas hacia una meta común.</p>
+</div>
+
+{% if invitaciones %}
+    <section class="tarjeta seccion">
+        <div class="tarjeta__encabezado">
+            <h2>Invitaciones pendientes</h2>
+            <p class="texto-suave">Acepta para ver el saldo y participar.</p>
+        </div>
+        <ul class="lista">
+            {% for i in invitaciones %}
+                <li class="lista__fila">
+                    <div>
+                        <strong>{{ i.bolsillo_nombre }}</strong>
+                        <span class="texto-suave">· te invitó {{ i.invitado_por }}</span>
+                    </div>
+                    <div class="acciones">
+                        <form method="post" action="{{ url_for('paginas.aceptar_juntia', bolsillo_id=i.bolsillo_id) }}">
+                            <button class="boton boton--pequeno" type="submit">Aceptar</button>
+                        </form>
+                        <form method="post" action="{{ url_for('paginas.rechazar_juntia', bolsillo_id=i.bolsillo_id) }}">
+                            <button class="boton boton--secundario boton--pequeno" type="submit">Rechazar</button>
+                        </form>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+
+<div class="rejilla">
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Mis bolsillos</h2>
+        </div>
+        {% if bolsillos %}
+            <ul class="lista">
+                {% for b in bolsillos %}
+                    <li class="lista__fila lista__fila--bloque">
+                        <div class="lista__titulo">
+                            <a href="{{ url_for('paginas.juntia', bolsillo_id=b.id) }}">{{ b.nombre }}</a>
+                            <span class="monto">{{ b.saldo | cop }}</span>
+                        </div>
+                        {{ progreso(b) }}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="vacio">Aún no participas en ningún bolsillo.</p>
+        {% endif %}
+    </section>
+
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Crear bolsillo</h2>
+            <p class="texto-suave">Quedas como primer miembro; luego invitas a los demás.</p>
+        </div>
+        <form method="post" action="{{ url_for('paginas.crear_juntia') }}">
+            {{ campo("nombre", "Nombre de la meta", valor=valores.get("nombre", ""), errores=errores,
+                     ayuda="Ej.: Viaje a Cartagena. Máximo 60 caracteres.",
+                     required=true, maxlength=60, autocomplete="off") }}
+            {{ campo("meta", "Meta (COP)", tipo="number", valor=valores.get("meta", ""), errores=errores,
+                     ayuda="Monto que quieren juntar, sin decimales.",
+                     required=true, min=1, step=1, inputmode="numeric") }}
+            <button class="boton" type="submit">Crear bolsillo</button>
+        </form>
+    </section>
+</div>
+{% endblock %}
