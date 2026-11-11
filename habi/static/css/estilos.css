@@ -291,3 +291,18 @@ main.contenedor {
         display: none;
     }
 }
+
+/* ---------- Panel de cuenta ---------- */
+
+.rejilla {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 760px) {
+    .rejilla {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import campo %}
 
 {% block titulo %}Mi cuenta{% endblock %}
 
@@ -7,4 +8,24 @@
     <p class="saldo__etiqueta">Saldo disponible</p>
     <p class="saldo__valor">{{ saldo | cop }}</p>
 </section>
+
+{# Solo se marcan los errores del formulario que se envió. #}
+{% set errores_carga = errores if formulario == "carga" else {} %}
+{% set valores_carga = valores if formulario == "carga" else {} %}
+
+<div class="rejilla">
+    <section class="tarjeta">
+        <div class="tarjeta__encabezado">
+            <h2>Cargar saldo</h2>
+            <p class="texto-suave">Carga simulada desde la cuenta de fondeo.</p>
+        </div>
+        <form method="post" action="{{ url_for('paginas.cargar') }}">
+            {{ campo("monto", "Monto (COP)", tipo="number", ident="monto-carga",
+                     valor=valores_carga.get("monto", ""), errores=errores_carga,
+                     ayuda="Entre 1 y 5.000.000 COP, sin decimales.",
+                     required=true, min=1, max=5000000, step=1, inputmode="numeric") }}
+            <button class="boton" type="submit">Cargar</button>
+        </form>
+    </section>
+</div>
 {% endblock %}
