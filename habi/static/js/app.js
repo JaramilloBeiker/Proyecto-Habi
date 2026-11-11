@@ -1,4 +1,4 @@
-// Habi — mejoras puntuales con JavaScript sin frameworks.
+// Nexo — mejoras puntuales con JavaScript sin frameworks.
 // Todo funciona igual sin JavaScript: el servidor valida y protege cada operación.
 
 // Da formato COP a un número entero escrito como texto: "50000" -> "50.000 COP".

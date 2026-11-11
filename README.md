@@ -1,7 +1,10 @@
-# Habi — Sistema de transferencias entre personas
+# Nexo — Sistema de transferencias entre personas
 
 Aplicación web local (Flask) para crear cuentas, cargar saldo simulado, transferir dinero entre
 cuentas, consultar saldo y ver el historial de movimientos. Reto Técnico HabiCapital 2027.
+
+> La interfaz se llama **Nexo**. El paquete de Python sigue siendo `habi` (y las variables de
+> entorno `HABI_*`) para no romper imports, comandos ni bases de datos existentes.
 
 > **Advertencia:** la aplicación usa el servidor de desarrollo de Flask. Está pensado **solo para
 > uso local** (escucha en `127.0.0.1`) y no debe publicarse en internet ni usarse en producción.
@@ -50,8 +53,11 @@ marcando el campo que falló (RNF-U-01, RNF-U-03).
   envía dos veces (doble clic o recarga), la transferencia no se repite (RNF-R-03).
 - JavaScript (`static/js/app.js`) solo agrega dos mejoras: deshabilita el botón al enviar y muestra
   el monto en COP mientras se escribe. Sin JavaScript todo sigue funcionando.
-- Paleta sobria: fondo gris claro, tarjetas blancas, azul marino como color principal; verde y rojo
-  solo para dinero que entra o sale. En celular la tabla de movimientos se apila.
+- Diseño: fuente Plus Jakarta Sans (Google Fonts) con títulos en 700–800. Una sola escala de azul
+  marino para la marca, los botones y la tarjeta de saldo, que es el punto focal de cada panel.
+  Sombras suaves, bordes redondeados y espacios amplios. El verde y el rojo se usan solo para el
+  dinero que entra o sale. En celular, la navegación baja a una segunda fila y la tabla de
+  movimientos se apila.
 
 ## API
 

@@ -113,7 +113,7 @@ def main() -> None:
     try:
         while True:
             if usuario is None:
-                opcion = mostrar_menu("Habi - Inicio", MENU_INICIO, "Salir")
+                opcion = mostrar_menu("Nexo - Inicio", MENU_INICIO, "Salir")
                 if opcion == "0":
                     break
                 if opcion in MENU_INICIO:

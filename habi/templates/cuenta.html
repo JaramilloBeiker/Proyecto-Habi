@@ -4,9 +4,26 @@
 {% block titulo %}Mi cuenta{% endblock %}
 
 {% block contenido %}
-<section class="tarjeta saldo">
-    <p class="saldo__etiqueta">Saldo disponible</p>
-    <p class="saldo__valor">{{ saldo | cop }}</p>
+<div class="pagina__encabezado">
+    <h1>Hola, {{ usuario.nombre }}</h1>
+    <p class="texto-suave">Este es el resumen de tu cuenta.</p>
+</div>
+
+<section class="saldo">
+    <div>
+        <p class="saldo__etiqueta">Saldo disponible</p>
+        <p class="saldo__valor">{{ saldo | cop }}</p>
+    </div>
+    <dl class="saldo__detalle">
+        <div>
+            <dt>Titular</dt>
+            <dd>{{ usuario.nombre }}</dd>
+        </div>
+        <div>
+            <dt>Moneda</dt>
+            <dd>Peso colombiano</dd>
+        </div>
+    </dl>
 </section>
 
 {# Solo se marcan los errores del formulario que se envió. #}
@@ -33,7 +50,7 @@
     <section class="tarjeta">
         <div class="tarjeta__encabezado">
             <h2>Transferir</h2>
-            <p class="texto-suave">Envía dinero a otro usuario de Habi.</p>
+            <p class="texto-suave">Envía dinero a otro usuario de Nexo.</p>
         </div>
         <form method="post" action="{{ url_for('paginas.transferir') }}">
             {# RNF-R-03: clave única de este formulario; reenviarlo no repite la transferencia. #}
