@@ -8,8 +8,8 @@ cuentas, consultar saldo y ver el historial de movimientos. Reto Técnico HabiCa
 
 ## Tecnologías
 
-Python 3.12+ · Flask (rutas y cookie de sesión firmada) · SQLite (`sqlite3`) ·
-`hashlib.pbkdf2_hmac` · `uuid` · pytest y cliente de pruebas de Flask
+Python 3.12+ · Flask (rutas y cookie de sesión firmada) · HTML, CSS y JavaScript sin frameworks con
+plantillas Jinja2 · SQLite (`sqlite3`) · `hashlib.pbkdf2_hmac` · `uuid` · pytest y cliente de pruebas de Flask
 
 ## Cómo ejecutar
 
@@ -18,7 +18,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
 
-python -m habi                  # servidor local en http://127.0.0.1:5000
+python -m habi                  # servidor local: abre http://127.0.0.1:5000 en el navegador
 python -m pytest                # suite completa (RNF-S-02)
 python -m habi.cli              # versión de consola (opcional)
 ```
@@ -29,6 +29,27 @@ Variables de entorno opcionales:
 |---|---|---|
 | `HABI_DB_PATH` | Ruta del archivo SQLite | `data/habi.db` |
 | `HABI_SECRET_KEY` | Clave para firmar la cookie de sesión | Una aleatoria en cada arranque (las sesiones abiertas se pierden al reiniciar; los datos no) |
+
+## Páginas
+
+Páginas HTML hechas con plantillas Jinja2. Cada formulario se envía al servidor, que llama a la
+misma capa de servicios que la API y muestra en la página el resultado o el motivo del error,
+marcando el campo que falló (RNF-U-01, RNF-U-03).
+
+| Ruta | Qué muestra | Requerimiento |
+|---|---|---|
+| `/registro` | Crear cuenta (abre sesión al terminar) | RF-01 |
+| `/entrar` | Iniciar sesión | RF-02 |
+| `/salir` (POST) | Cerrar sesión | RF-02 |
+| `/cuenta` | Saldo, cargar saldo, transferir y últimos 5 movimientos | RF-03, RF-04, RF-05 |
+| `/historial?pagina=0` | Movimientos en bloques de 20 | RF-06 |
+
+- El formulario de transferencia lleva una clave `uuid4` oculta generada por el servidor. Si se
+  envía dos veces (doble clic o recarga), la transferencia no se repite (RNF-R-03).
+- JavaScript (`static/js/app.js`) solo agrega dos mejoras: deshabilita el botón al enviar y muestra
+  el monto en COP mientras se escribe. Sin JavaScript todo sigue funcionando.
+- Paleta sobria: fondo gris claro, tarjetas blancas, azul marino como color principal; verde y rojo
+  solo para dinero que entra o sale. En celular la tabla de movimientos se apila.
 
 ## API
 
@@ -62,12 +83,16 @@ habi/
   repository.py  Acceso a datos (solo SQL)
   services.py    Lógica de negocio: sesiones, cargas, transferencias, saldo, historial
   formato.py     Formato de montos en COP
-  web.py         Rutas Flask (API JSON)
+  web.py         Creación de la app Flask y rutas de la API JSON
+  paginas.py     Rutas de las páginas HTML
+  templates/     Plantillas Jinja2 (base, acceso, cuenta, historial, macros)
+  static/        estilos.css y app.js
   cli.py         Menú de consola (opcional)
-tests/           Una o más pruebas por requerimiento (servicios y rutas)
+tests/           Una o más pruebas por requerimiento (servicios, API y páginas)
 ```
 
-Separación de capas (RNF-S-01): `web` / `cli` → `services` → `repository` → SQLite.
+Separación de capas (RNF-S-01): `paginas` / `web` / `cli` → `services` → `repository` → SQLite.
+Las plantillas solo presentan datos; no tienen reglas de negocio.
 
 ## Sesiones
 
